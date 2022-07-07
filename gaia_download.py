@@ -45,9 +45,7 @@ def gaia_cone_search_5d(ra: float,
     
     query: str = f'''
         SELECT source_id, ra, dec, parallax, parallax_error, 
-        pmra, pmra_error, pmdec, pmdec_error, DISTANCE(
-           POINT('ICRS', {ra_str}, {dec_str}),
-           POINT('ICRS', ra, dec)) AS ang_sep  
+        pmra, pmra_error, pmdec, pmdec_error, phot_bp_mean_mag, phot_g_mean_mag, phot_rp_mean_mag 
         FROM gaiadr3.gaia_source 
         WHERE 1 = CONTAINS( 
             POINT('ICRS', ra, dec), 
