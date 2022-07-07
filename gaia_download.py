@@ -30,15 +30,15 @@ def gaia_cone_search_5d(ra: float,
         :param radius: radius of the area we wish to search in [degrees]
         :return table of 5D data for objects in the area
     """
-#     results = Gaia.cone_search_async(SkyCoord(coords, frame=ICRS, unit=u.deg),
-#                                      u.Quantity(radius, u.deg))
     job = Gaia.launch_job_async(f'''
         SELECT source_id, ra, dec, parallax, parallax_error, 
-        pmra, pmra_error, pmdec, pmdec_error 
+        pmra, pmra_error, pmdec, pmdec_error, DISTANCE(
+           POINT('ICRS', +{str(ra)}, +{str(dec)}),
+           POINT('ICRS', ra, dec)) AS ang_sep  
         FROM gaiadr3.gaia_source 
         WHERE 1 = CONTAINS( 
-            POINT({ra}, {dec}), 
-            CIRCLE(ra, dec, {radius})) 
+            POINT('ICRS', ra, dec), 
+            CIRCLE('ICRS', +{str(ra)}, +{str(dec)}, 1.0)) 
         AND parallax > {min_parallax} AND parallax < {max_parallax} 
     ''', output_format='csv')
 
