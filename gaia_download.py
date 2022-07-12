@@ -44,8 +44,7 @@ def gaia_cone_search_5d(ra: float,
     print(f"Executing cone search for ra={ra_str} and dec={dec_str} with radius of {radius}...")
     
     query: str = f'''
-        SELECT source_id, ra, dec, parallax, parallax_error, 
-        pmra, pmra_error, pmdec, pmdec_error, phot_bp_mean_mag, phot_g_mean_mag, phot_rp_mean_mag 
+        SELECT *
         FROM gaiadr3.gaia_source 
         WHERE 1 = CONTAINS( 
             POINT('ICRS', ra, dec), 
