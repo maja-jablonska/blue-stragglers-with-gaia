@@ -61,3 +61,18 @@ def gaia_cone_search_5d(ra: float,
     
     return job.get_results().to_pandas()
     
+    
+def gaia_get_dr2_in_dr3(dr2: int) -> pd.DataFrame:
+    
+    query: str = f'''
+    SELECT dr2_source_id, dr3_source_id, angular_distance, magnitude_difference, proper_motion_propagation
+    FROM gaiadr3.dr2_neighbourhood
+    WHERE dr2_source_id = {dr2}
+    '''
+        
+    print('Executing query:')
+    print(query)
+    
+    job = Gaia.launch_job(query, output_format='csv')
+    
+    return job.get_results().to_pandas()
