@@ -76,3 +76,36 @@ def gaia_get_dr2_in_dr3(dr2: int) -> pd.DataFrame:
     job = Gaia.launch_job(query, output_format='csv')
     
     return job.get_results().to_pandas()
+
+
+def get_photogeometric_distances(ra: float,
+                                 dec: float,
+                                 radius: float,
+                                 min_parallax: float,
+                                 max_parallax: float) -> pd.DataFrame:
+    
+    query: str = f'''
+      SELECT 
+      source_id, ra, dec,
+      r_med_geo, r_lo_geo, r_hi_geo,
+      r_med_photogeo, r_lo_photogeo, r_hi_photogeo,
+      phot_bp_mean_mag-phot_rp_mean_mag AS bp_rp,
+      phot_g_mean_mag - 5 * LOG10(r_med_geo) + 5 AS qg_geo,
+      phot_g_mean_mag - 5 * LOG10(r_med_photogeo) + 5 AS gq_photogeo
+      FROM (
+        SELECT * FROM gaiaedr3.gaia_source
+            WHERE 1 = CONTAINS( 
+            POINT('ICRS', ra, dec), 
+            CIRCLE('ICRS', {ra}, {dec}, {radius})) 
+        AND parallax > {min_parallax} AND parallax < {max_parallax} 
+      ) AS edr3
+      JOIN external.gaiaedr3_distance using(source_id)
+      WHERE ruwe<1.4 
+    '''
+        
+    print('Executing query:')
+    print(query)
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas() 
