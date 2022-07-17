@@ -1,7 +1,9 @@
+from unittest import result
 import pyvo as vo
 import numpy as np
 import pandas as pd
 import re
+from typing import Optional, Tuple
 
 
 def simbad_tap():
@@ -19,6 +21,23 @@ def fetch_catalog_id(ids: str, catalog_identifier: str, verbose: bool = False):
         if verbose:
             print(f'No {catalog_identifier} id for ids={ids}...')
         return np.nan
+
+
+def resolve_name(obj_identifier: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    service = simbad_tap()
+    try:
+        resultset = service.search(f'''select ra, dec, plx_value 
+            from basic where main_id='{obj_identifier}'
+        ''').to_table().to_pandas().values
+
+        if len(resultset) == 1:
+            return resultset[0, 0], resultset[0, 1], resultset[0, 2]
+        else:
+            return None, None, None
+    except Exception as e:
+        print(f'Exception while querying: {e}')
+        return None, None, None
+
 
 
 def fetch_object_children(obj_identifier: str) -> pd.DataFrame:
