@@ -37,7 +37,7 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
     COLUMNS = ['ra', 'dec', 'parallax', 'pmra', 'pmdec']
 
     click.secho(f'\nResolving {cluster_name} using Simbad...')
-    cluster_ra, cluster_dec, cluster_parallax = resolve_name(cluster_name)
+    cluster_ra, cluster_dec, cluster_parallax, cluster_pmra, cluster_pmdec, cluster_radvel = resolve_name(cluster_name)
 
     if not (cluster_ra and cluster_dec and cluster_parallax):
         click.secho(f'Couldn\'t resolve name {cluster_name}.', fg='red', bold=True)
@@ -48,6 +48,9 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         \t ra={cluster_ra} deg
         \t dec={cluster_dec} deg
         \t parallax={cluster_parallax} mas
+        \t pmra={cluster_pmra} mas/yr
+        \t pmdec={cluster_pmdec} mas/yr
+        \t radvel={cluster_radvel} km/s
     ''')
     min_parallax: float = max(0., cluster_parallax-0.25)
     max_parallax: float = cluster_parallax+0.25
@@ -56,8 +59,11 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
     Querying {radius} degrees around cluster center, with parallax in range [{min_parallax}, {max_parallax}]
     ''')
 
-    sources: pd.DataFrame = gaia_cone_search_5d(cluster_ra, cluster_dec, radius=radius,
-                                                min_parallax=min_parallax, max_parallax=max_parallax)
+    sources: pd.DataFrame = gaia_cone_search_5d(cluster_ra, cluster_dec, cluster_parallax,
+                                                cluster_pmra, cluster_pmdec, cluster_radvel
+                                                radius=radius,
+                                                min_parallax=min_parallax,
+                                                max_parallax=max_parallax)
 
     click.secho(f'Found {len(sources.index)} sources')
     click.secho(f'Filtering by RUWE<1.4 and parallax_over_error>10')

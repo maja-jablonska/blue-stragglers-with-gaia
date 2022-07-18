@@ -1,4 +1,3 @@
-from tracemalloc import start
 from astroquery.gaia import Gaia
 import pandas as pd
 
@@ -60,6 +59,106 @@ def gaia_cone_search_5d(ra: float,
     print(f"Query finished!")
     
     return job.get_results().to_pandas()
+
+
+def panstarrs1_cross_match(ra: float,
+                           dec: float,
+                           parallax: float,
+                           pmra: float,
+                           pmdec: float,
+                           radvel: float,
+                           radius: float,
+                           min_parallax: float,
+                           max_parallax: float) -> pd.DataFrame:
+    
+    query: str = f'''
+      SELECT
+      panstarrs1_best_neighbour.source_id,
+      panstarrs1_best_neighbour.clean_panstarrs1_oid,
+      panstarrs1_best_neighbour.original_ext_source_id,
+      panstarrs1_best_neighbour.angular_distance
+      FROM gaiadr3.gaia_source JOIN gaiadr3.panstarrs1_best_neighbour ON gaia_source.source_id=panstarrs1_best_neighbour.source_id
+      WHERE 1 = CONTAINS( 
+            POINT('ICRS', ra, dec), 
+            CIRCLE('ICRS',
+                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+            {radius})) 
+      AND parallax > {min_parallax} AND parallax < {max_parallax}
+    '''
+        
+    print('Executing query:')
+    print(query)
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas()
+
+
+def allwise_cross_match(ra: float,
+                        dec: float,
+                        parallax: float,
+                        pmra: float,
+                        pmdec: float,
+                        radvel: float,
+                        radius: float,
+                        min_parallax: float,
+                        max_parallax: float) -> pd.DataFrame:
+    
+    query: str = f'''
+      SELECT 
+      allwise_best_neighbour.source_id, 
+      allwise_best_neighbour.original_ext_source_id, 
+      allwise_best_neighbour.angular_distance 
+      FROM gaiadr3.gaia_source JOIN gaiadr3.allwise_best_neighbour ON gaia_source.source_id=allwise_best_neighbour.source_id
+      WHERE 1 = CONTAINS( 
+            POINT('ICRS', ra, dec), 
+            CIRCLE('ICRS',
+                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+            {radius})) 
+      AND parallax > {min_parallax} AND parallax < {max_parallax}
+    '''
+        
+    print('Executing query:')
+    print(query)
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas()
+
+
+def tmass_cross_match(ra: float,
+                      dec: float,
+                      parallax: float,
+                      pmra: float,
+                      pmdec: float,
+                      radvel: float,
+                      radius: float,
+                      min_parallax: float,
+                      max_parallax: float) -> pd.DataFrame:
+    
+    query: str = f'''
+      SELECT 
+      tmass_psc_xsc_best_neighbour.source_id, 
+      tmass_psc_xsc_best_neighbour.original_ext_source_id, 
+      tmass_psc_xsc_best_neighbour.angular_distance 
+      FROM gaiadr3.gaia_source JOIN gaiadr3.tmass_psc_xsc_best_neighbour ON gaia_source.source_id=tmass_psc_xsc_best_neighbour.source_id
+      WHERE 1 = CONTAINS( 
+            POINT('ICRS', ra, dec), 
+            CIRCLE('ICRS',
+                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+            {radius})) 
+      AND parallax > {min_parallax} AND parallax < {max_parallax}
+    '''
+        
+    print('Executing query:')
+    print(query)
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas()
     
     
 def gaia_get_dr2_in_dr3(dr2: int) -> pd.DataFrame:
@@ -80,6 +179,10 @@ def gaia_get_dr2_in_dr3(dr2: int) -> pd.DataFrame:
 
 def get_photogeometric_distances(ra: float,
                                  dec: float,
+                                 parallax: float,
+                                 pmra: float,
+                                 pmdec: float,
+                                 radvel: float,
                                  radius: float,
                                  min_parallax: float,
                                  max_parallax: float) -> pd.DataFrame:
@@ -96,7 +199,10 @@ def get_photogeometric_distances(ra: float,
         SELECT * FROM gaiaedr3.gaia_source
             WHERE 1 = CONTAINS( 
             POINT('ICRS', ra, dec), 
-            CIRCLE('ICRS', {ra}, {dec}, {radius})) 
+            CIRCLE('ICRS',
+                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+            {radius})) 
         AND parallax > {min_parallax} AND parallax < {max_parallax} 
       ) AS edr3
       JOIN external.gaiaedr3_distance using(source_id)

@@ -1,7 +1,7 @@
 from dustmaps.bayestar import BayestarWebQuery
 from uncertainties import ufloat
 from uncertainties.umath import log10
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import ICRS, SkyCoord
 import astropy.units as u
 from typing import Tuple
 import numpy as np
@@ -22,6 +22,8 @@ GAIA_EXTINCTION_VECTOR = {
     'G_BP': 1.08337,
     'G_RP': 0.63439
 }
+
+
 
 
 def absolute_magnitude(g_mean_mag: np.float32,
@@ -47,13 +49,14 @@ def color(bp_mean_mag: np.float32,
 
 def gaia_extinction(b_v: np.float32, passband: str) -> np.float32:
     try:
-        return 3.1*GAIA_EXTINCTION_VECTOR[passband]*b_v
+        return 3.1*GAIA_EXTINCTION_VECTOR[passband]*b_v*0.981
     except KeyError:
         raise ValueError(f'Passband must be one of Gaia passbands: {GAIA_PASSBANDS}!')
 
         
 def extinction_coefficient(ra: np.float32, dec: np.float32, distance: np.float32) -> np.float32:
-    return bq.query(coords=SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg), distance=distance*u.kpc), mode='best')
+    return bq.query(coords=SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg),
+                                    distance=distance*u.kpc, frame=ICRS), mode='best')
 
 
 def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
@@ -65,25 +68,50 @@ def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
                                       'phot_bp_mean_mag': 'BP',
                                       'phot_rp_mean_mag': 'RP'})
     
-    sources['B(E_V)'] = extinction_coefficient(sources.ra.values,
+    sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
                                                sources.dec.values,
-                                               sources.parallax.values)
-    sources['A_G'] = gaia_extinction(sources['B(E_V)'].values, 'G')
-    sources['A_BP'] = gaia_extinction(sources['B(E_V)'].values, 'G_BP')
-    sources['A_RP'] = gaia_extinction(sources['B(E_V)'].values, 'G_RP')
+                                               1/sources.parallax.values)
+    sources['A_V'] = 3.1*sources['E(B_V)']*0.981
+    sources['A_G'] = gaia_extinction(sources['E(B_V)'].values, 'G')
+    sources['A_BP'] = gaia_extinction(sources['E(B_V)'].values, 'G_BP')
+    sources['A_RP'] = gaia_extinction(sources['E(B_V)'].values, 'G_RP')
     
-    sources['color'], sources['color_err'] = np.vectorize(color)(sources['BP'].values,
-                                                                 sources['BP_err'].values,
-                                                                 sources['A_BP'].values,
-                                                                 sources['RP'].values,
-                                                                 sources['RP_err'].values,
-                                                                 sources['A_RP'].values)
+    sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
+    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
     
-    sources['mag_abs'], sources['mag_abs_err'] = np.vectorize(absolute_magnitude)(sources['G'].values,
-                                                                                  sources['G_err'].values,
-                                                                                  sources['A_G'].values,
-                                                                                  sources['parallax'].values,
-                                                                                  sources['parallax_error'].values)
+    #G = g - 10. + 5.*np.log10(par) - A_G  
+    sources['mag_abs'] = sources['G'] - 10. + 5.*np.log10(sources['parallax']) - sources['A_G']
+    # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
+    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'], 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error']), 2))
+    
+    return sources
+
+
+def add_colors_and_abs_mag_photogeo(sources: pd.DataFrame) -> pd.DataFrame:
+    sources['BP_err'] = 2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])
+    sources['RP_err'] = 2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])
+    sources['G_err'] = 2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])
+
+    sources = sources.rename(columns={'phot_g_mean_mag': 'G',
+                                      'phot_bp_mean_mag': 'BP',
+                                      'phot_rp_mean_mag': 'RP'})
+    
+    sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
+                                               sources.dec.values,
+                                               sources.distance.values)
+    sources['A_V'] = 3.1*sources['E(B_V)']*0.981
+    sources['A_G'] = gaia_extinction(sources['E(B_V)'].values, 'G')
+    sources['A_BP'] = gaia_extinction(sources['E(B_V)'].values, 'G_BP')
+    sources['A_RP'] = gaia_extinction(sources['E(B_V)'].values, 'G_RP')
+    
+    sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
+    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
+    
+    #G = g - 10. + 5.*np.log10(par) - A_G  
+    sources['mag_abs'] = sources['G'] + 5 - 5.*np.log10(sources['distance']) - sources['A_G']
+    # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
+    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'], 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error']), 2))
+    
     return sources
 
 

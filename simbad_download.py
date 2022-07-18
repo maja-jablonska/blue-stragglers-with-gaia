@@ -26,17 +26,17 @@ def fetch_catalog_id(ids: str, catalog_identifier: str, verbose: bool = False):
 def resolve_name(obj_identifier: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     service = simbad_tap()
     try:
-        resultset = service.search(f'''select ra, dec, plx_value 
+        resultset = service.search(f'''select ra, dec, plx_value, pmra, pmdec, rvz_radvel 
             from basic where main_id='{obj_identifier}'
         ''').to_table().to_pandas().values
 
         if len(resultset) == 1:
-            return resultset[0, 0], resultset[0, 1], resultset[0, 2]
+            return tuple(resultset[0, :])
         else:
-            return None, None, None
+            return None, None, None, None, None, None
     except Exception as e:
         print(f'Exception while querying: {e}')
-        return None, None, None
+        return None, None, None, None, None, None
 
 
 
