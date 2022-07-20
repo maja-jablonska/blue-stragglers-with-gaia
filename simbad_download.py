@@ -5,7 +5,6 @@ import pandas as pd
 import re
 from typing import Optional, Tuple
 
-
 def simbad_tap():
     return vo.dal.TAPService("http://simbad.u-strasbg.fr/simbad/sim-tap")
 

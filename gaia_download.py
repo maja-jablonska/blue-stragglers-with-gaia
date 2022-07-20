@@ -1,3 +1,4 @@
+from numpy import column_stack
 from astroquery.gaia import Gaia
 import pandas as pd
 
@@ -27,13 +28,24 @@ def get_sources_by_random_index(rows: int = 1000, start_index: int = 0) -> pd.Da
 
 def gaia_cone_search_5d(ra: float,
                         dec: float,
+                        parallax: float,
+                        pmra: float,
+                        pmdec: float,
+                        radvel: float,
                         radius: float,
                         min_parallax: float,
                         max_parallax: float) -> pd.DataFrame:
     """
+        Perform a cone search in Gaia DR3 with proper motion propagation.
         :param ra: right ascension of the cluster center [degree]
         :param dec: declination of the cluster center [degree]
+        :param parallax: parallax of the cluster center [mas]
+        :param pmra: proper motion of the cluster center [mas/yr]
+        :param pmdec: proper motion of the cluster center [mas/yr]
+        :param radvel: radial velocity of the cluster center [km/s]
         :param radius: radius of the area we wish to search in [degrees]
+        :param min_parallax: minimum parallax for sources [mas]
+        :param max_parallax: maximum parallax for sources [mas]
         :return table of 5D data for objects in the area
     """
     
@@ -46,8 +58,11 @@ def gaia_cone_search_5d(ra: float,
         SELECT *
         FROM gaiadr3.gaia_source 
         WHERE 1 = CONTAINS( 
-            POINT('ICRS', ra, dec), 
-            CIRCLE('ICRS', {ra_str}, {dec_str}, {radius})) 
+                POINT('ICRS', ra, dec), 
+                CIRCLE('ICRS',
+                    COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                    COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
+                {radius})) 
         AND parallax > {min_parallax} AND parallax < {max_parallax} 
     '''
         
@@ -61,20 +76,35 @@ def gaia_cone_search_5d(ra: float,
     return job.get_results().to_pandas()
 
 
-def panstarrs1_cross_match(ra: float,
-                           dec: float,
-                           parallax: float,
-                           pmra: float,
-                           pmdec: float,
-                           radvel: float,
-                           radius: float,
-                           min_parallax: float,
-                           max_parallax: float) -> pd.DataFrame:
+def panstarrs1_cone_search_best_neighbour(ra: float,
+                                          dec: float,
+                                          parallax: float,
+                                          pmra: float,
+                                          pmdec: float,
+                                          radvel: float,
+                                          radius: float,
+                                          min_parallax: float,
+                                          max_parallax: float) -> pd.DataFrame:
+    """Perform a cone search around cluster center with proper motion propagation.
+
+    Args:
+        ra (float): right ascension of the cluster center [degrees]
+        dec (float): declination of the cluster center [degrees]
+        parallax (float): parallax of the cluster center [mas]
+        pmra (float): proper motion of the cluster center [mas/yr]
+        pmdec (float): proper motion of the cluster center [mas/yr]
+        radvel (float): radial velocity of the cluster center [km/s]
+        radius (float): radius to search around the cluster center [degrees]
+        min_parallax (float): minimum parallax for sources [mas]
+        max_parallax (float): maximum parallax for the sources [mas]
+
+    Returns:
+        pd.DataFrame: Gaia DR3 cone search results with best neighbours from panstarrs1_best_neighbour
+    """
     
     query: str = f'''
       SELECT
       panstarrs1_best_neighbour.source_id,
-      panstarrs1_best_neighbour.clean_panstarrs1_oid,
       panstarrs1_best_neighbour.original_ext_source_id,
       panstarrs1_best_neighbour.angular_distance
       FROM gaiadr3.gaia_source JOIN gaiadr3.panstarrs1_best_neighbour ON gaia_source.source_id=panstarrs1_best_neighbour.source_id
@@ -92,18 +122,37 @@ def panstarrs1_cross_match(ra: float,
     
     job = Gaia.launch_job_async(query, output_format='csv')
     
-    return job.get_results().to_pandas()
+    return job.get_results().to_pandas().rename(columns={
+        'original_ext_source_id': 'panstarrs1_id',
+        'angular_distance': 'panstarrs1_angular_distance'
+    })
 
 
-def allwise_cross_match(ra: float,
-                        dec: float,
-                        parallax: float,
-                        pmra: float,
-                        pmdec: float,
-                        radvel: float,
-                        radius: float,
-                        min_parallax: float,
-                        max_parallax: float) -> pd.DataFrame:
+def allwise_cone_search_best_neighbour(ra: float,
+                                       dec: float,
+                                       parallax: float,
+                                       pmra: float,
+                                       pmdec: float,
+                                       radvel: float,
+                                       radius: float,
+                                       min_parallax: float,
+                                       max_parallax: float) -> pd.DataFrame:
+    """Perform a cone search around cluster center with proper motion propagation.
+
+    Args:
+        ra (float): right ascension of the cluster center [degrees]
+        dec (float): declination of the cluster center [degrees]
+        parallax (float): parallax of the cluster center [mas]
+        pmra (float): proper motion of the cluster center [mas/yr]
+        pmdec (float): proper motion of the cluster center [mas/yr]
+        radvel (float): radial velocity of the cluster center [km/s]
+        radius (float): radius to search around the cluster center [degrees]
+        min_parallax (float): minimum parallax for sources [mas]
+        max_parallax (float): maximum parallax for the sources [mas]
+
+    Returns:
+        pd.DataFrame: Gaia DR3 cone search results with best neighbours from allwise_best_neighbour
+    """
     
     query: str = f'''
       SELECT 
@@ -125,18 +174,37 @@ def allwise_cross_match(ra: float,
     
     job = Gaia.launch_job_async(query, output_format='csv')
     
-    return job.get_results().to_pandas()
+    return job.get_results().to_pandas().rename(columns={
+        'original_ext_source_id': 'allwise_id',
+        'angular_distance': 'allwise_angular_distance'
+    })
 
 
-def tmass_cross_match(ra: float,
-                      dec: float,
-                      parallax: float,
-                      pmra: float,
-                      pmdec: float,
-                      radvel: float,
-                      radius: float,
-                      min_parallax: float,
-                      max_parallax: float) -> pd.DataFrame:
+def twomass_cone_search_best_neighbour(ra: float,
+                                       dec: float,
+                                       parallax: float,
+                                       pmra: float,
+                                       pmdec: float,
+                                       radvel: float,
+                                       radius: float,
+                                       min_parallax: float,
+                                       max_parallax: float) -> pd.DataFrame:
+    """Perform a cone search around cluster center with proper motion propagation.
+
+    Args:
+        ra (float): right ascension of the cluster center [degrees]
+        dec (float): declination of the cluster center [degrees]
+        parallax (float): parallax of the cluster center [mas]
+        pmra (float): proper motion of the cluster center [mas/yr]
+        pmdec (float): proper motion of the cluster center [mas/yr]
+        radvel (float): radial velocity of the cluster center [km/s]
+        radius (float): radius to search around the cluster center [degrees]
+        min_parallax (float): minimum parallax for sources [mas]
+        max_parallax (float): maximum parallax for the sources [mas]
+
+    Returns:
+        pd.DataFrame: Gaia DR3 cone search results with best neighbours from tmass_psc_xsc_best_neighbour
+    """
     
     query: str = f'''
       SELECT 
@@ -158,7 +226,56 @@ def tmass_cross_match(ra: float,
     
     job = Gaia.launch_job_async(query, output_format='csv')
     
-    return job.get_results().to_pandas()
+    return job.get_results().to_pandas().rename(columns={
+        'original_ext_source_id': 'twomass_id',
+        'angular_distance': 'twomass_angular_distance'
+    })
+
+
+def cluster_sources_with_cross_match(ra: float,
+                                     dec: float,
+                                     parallax: float,
+                                     pmra: float,
+                                     pmdec: float,
+                                     radvel: float,
+                                     radius: float,
+                                     min_parallax: float,
+                                     max_parallax: float,
+                                     max_neighbour_angular_separation: float = 0.01) -> pd.DataFrame:
+    """Fetch sources by a cone search from Gaia DR3 and cross-match with panstarrs1, 2mass and wise
+
+    Args:
+        ra (float): right ascension of the cluster center [degrees]
+        dec (float): declination of the cluster center [degrees]
+        parallax (float): parallax of the cluster center [mas]
+        pmra (float): proper motion of the cluster center [mas/yr]
+        pmdec (float): proper motion of the cluster center [mas/yr]
+        radvel (float): radial velocity of the cluster center [km/s]
+        radius (float): radius to search around the cluster center [degrees]
+        min_parallax (float): minimum parallax for sources [mas]
+        max_parallax (float): maximum parallax for the sources [mas]
+        max_neighbour_angular_separation (float): maximum angular separation for the neighbour to be a cross-match [arcseconds]
+
+    Returns:
+        pd.DataFrame: Gaia DR3 sources with IDs from panstarrs1, 2mass and wise
+    """
+    
+    gaia_sources: pd.DataFrame = gaia_cone_search_5d(ra, dec, parallax, pmra, pmdec, radvel, radius, min_parallax, max_parallax)
+    panstarrs1_sources: pd.DataFrame = panstarrs1_cone_search_best_neighbour(ra, dec, parallax, pmra, pmdec, radvel, radius, min_parallax, max_parallax)
+    allwise_sources: pd.DataFrame = allwise_cone_search_best_neighbour(ra, dec, parallax, pmra, pmdec, radvel, radius, min_parallax, max_parallax)
+    twomass_sources: pd.DataFrame = twomass_cone_search_best_neighbour(ra, dec, parallax, pmra, pmdec, radvel, radius, min_parallax, max_parallax)
+    
+    # Filter by the angular distance
+    panstarrs1_sources = panstarrs1_sources[panstarrs1_sources['panstarrs1_angular_distance']<max_neighbour_angular_separation]
+    allwise_sources = allwise_sources[allwise_sources['allwise_angular_distance']<max_neighbour_angular_separation]
+    twomass_sources = twomass_sources[twomass_sources['twomass_angular_distance']<max_neighbour_angular_separation]
+    
+    # pd.merge(product,customer,on='Product_ID',how='left')
+    gaia_sources: pd.DataFrame = pd.merge(gaia_sources, panstarrs1_sources, on='source_id', how='left')
+    gaia_sources: pd.DataFrame = pd.merge(gaia_sources, allwise_sources, on='source_id', how='left')
+    gaia_sources: pd.DataFrame = pd.merge(gaia_sources, twomass_sources, on='source_id', how='left')
+    
+    return gaia_sources
     
     
 def gaia_get_dr2_in_dr3(dr2: int) -> pd.DataFrame:
