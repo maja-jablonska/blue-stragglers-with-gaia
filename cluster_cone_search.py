@@ -14,6 +14,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from cluster_utils import is_in_cluster_function
 import os.path
+from tqdm import tqdm
 
 
 def normalize(sources: pd.DataFrame,
@@ -94,15 +95,36 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         sources.ra = sky_coords.ra.wrap_at(180 * u.deg).value
         
         click.secho(f'Querying PANSTARRS1.')
-        panstarrs1_mags = query_panstarrs1(sources.dropna(subset=['panstarrs1_id']).panstarrs1_id.values)
+        panstarrs_ids = sources.dropna(subset=['panstarrs1_id']).panstarrs1_id.values
+        
+        panstarrs1_mags = query_panstarrs1()
+        panstarrs_chunks = min(max(int(len(panstarrs_ids)/1000), 1), 20)
+        
+        for panstarrs_chunk in tqdm(np.array_split(panstarrs_ids, panstarrs_chunks)):
+            panstarrs1_mags = pd.concat([panstarrs1_mags, query_panstarrs1(panstarrs_chunk)])
         click.secho(f'{len(panstarrs1_mags.index)} sources with PANSTARRS1 mags.')
         
         click.secho(f'Querying 2MASS.')
-        twomass_mags = query_twomass(sources.dropna(subset=['twomass_id']).twomass_id.values)
+        
+        twomass_ids = sources.dropna(subset=['twomass_id']).twomass_id.values
+        
+        twomass_mags = query_twomass()
+        twomass_chunks = min(max(int(len(twomass_ids)/1000), 1), 20)
+        
+        for twomass_chunk in tqdm(np.array_split(twomass_ids, twomass_chunks)):
+            twomass_mags = pd.concat([twomass_mags, query_twomass(twomass_chunk)])
         click.secho(f'{len(twomass_mags.index)} sources with 2MASS mags.')
         
         click.secho(f'Querying CatWISE.')
-        allwise_mags = query_allwise(sources.dropna(subset=['allwise_id']).allwise_id.values)
+        
+        allwise_ids = sources.dropna(subset=['allwise_id']).allwise_id.values
+        
+        allwise_mags = query_allwise()
+        allwise_chunks = max(min(int(len(allwise_ids)/1000), 1), 20)
+        
+        for allwise_chunk in tqdm(np.array_split(allwise_ids, allwise_chunks)):
+            allwise_mags = pd.concat([allwise_mags, query_allwise(allwise_chunk)])
+            
         click.secho(f'{len(allwise_mags.index)} sources with CatWISE mags.')
 
         sources = pd.merge(sources, panstarrs1_mags, left_on='panstarrs1_id', right_on='objID', how='left')

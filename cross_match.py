@@ -21,7 +21,17 @@ CATWISE_FLAGS = {
 }
 
 
-def query_panstarrs1(obj_ids: np.array) -> pd.DataFrame:
+def query_panstarrs1(obj_ids: np.array = []) -> pd.DataFrame:
+    
+    if len(obj_ids) == 0:
+        return pd.DataFrame(data=[],
+                            columns=['objID', 'RAMean', 'DecMean', 'nDetections',
+                                     'gMeanPSFMag', 'gMeanPSFMagErr',
+                                     'rMeanPSFMag', 'rMeanPSFMagErr',
+                                     'iMeanPSFMag', 'iMeanPSFMagErr',
+                                     'zMeanPSFMag', 'zMeanPSFMagErr',
+                                     'yMeanPSFMag', 'yMeanPSFMagErr'])
+    
     job = PANSTARRS1.run_async(f"""
         SELECT objID, RAMean, DecMean, nDetections,
         gMeanPSFMag, gMeanPSFMagErr,
@@ -36,16 +46,26 @@ def query_panstarrs1(obj_ids: np.array) -> pd.DataFrame:
     return TAP_results.to_pandas()
 
 
-def query_twomass(obj_ids: np.array) -> pd.DataFrame:
-    # dec	err_ang	err_maj	err_min	ext_key	h_m	h_msigcom	j_date	j_m	j_msigcom	ks_m	ks_msigcom	name	ra
+def query_twomass(obj_ids: np.array = []) -> pd.DataFrame:
     COLUMNS = ['name', 'h_m', 'h_msigcom', 'j_m', 'j_msigcom', 'ks_m', 'ks_msigcom']
+    
+    if len(obj_ids) == 0:
+        return pd.DataFrame(data=[],
+                            columns=COLUMNS)
+    
     try:
         return ESASky.query_ids_catalogs(source_ids=obj_ids, catalogs=["TwoMASS"])[0].to_pandas()[COLUMNS]
     except:
         return pd.DataFrame(columns=COLUMNS, data=[])
 
 
-def query_allwise(obj_ids: np.array) -> pd.DataFrame:
+def query_allwise(obj_ids: np.array = []) -> pd.DataFrame:
+    if len(obj_ids) == 0:
+        return pd.DataFrame(data=[],
+                            columns=['source_name', 'w1mag', 
+                                     'w1sigm', 'w1flg',
+                                     'w2mag', 'w2sigm', 'w2flg'])
+    
     job = IRSA.run_async(f"""
            SELECT source_name, w1mag, w1sigm, w1flg, w2mag, w2sigm, w2flg 
            FROM catwise_2020
