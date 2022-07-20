@@ -5,6 +5,20 @@ from astroquery.esasky import ESASky
 
 
 PANSTARRS1 = vo.dal.TAPService("http://vao.stsci.edu/PS1DR2/tapservice.aspx")
+IRSA = vo.dal.TAPService('https://irsa.ipac.caltech.edu/TAP')
+
+
+# Refer to https://irsa.ipac.caltech.edu/data/WISE/CatWISE/gator_docs/catwise_colDescriptions.html#apflag
+
+CATWISE_FLAGS = {
+    0: 'no contamination',
+    1: 'source confusion',
+    2: 'bad or fatal pixels',
+    4: 'non-zero bit flag tripped',
+    8: 'corruption',
+    16: 'saturation',
+    32: 'upper limit'
+}
 
 
 def query_panstarrs1(obj_ids: np.array) -> pd.DataFrame:
@@ -32,10 +46,10 @@ def query_twomass(obj_ids: np.array) -> pd.DataFrame:
 
 
 def query_allwise(obj_ids: np.array) -> pd.DataFrame:
-    # w1mpro	w1mpro_error	
-    COLUMNS = ['name', 'w1mpro', 'w1mpro_error', 'w2mpro', 'w2mpro_error',
-               'w3mpro', 'w3mpro_error', 'w4mpro', 'w4mpro_error']
-    try:
-        return ESASky.query_ids_catalogs(source_ids=obj_ids, catalogs=["ALLWise"])[0].to_pandas()[COLUMNS]
-    except:
-        return pd.DataFrame(columns=COLUMNS, data=[])
+    job = IRSA.run_async(f"""
+           SELECT source_name, w1mag, w1sigm, w1flg, w2mag, w2sigm, w2flg 
+           FROM catwise_2020
+           WHERE source_name IN ({', '.join([f"'{str(o)}'" for o in obj_ids])})
+    """)
+    TAP_results = job.to_table()
+    return TAP_results.to_pandas()

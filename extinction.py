@@ -32,8 +32,8 @@ bq = BayestarWebQuery()
 
 EXTINCTION_VECTOR = {
     'G': 0.83627,
-    'G_BP': 1.08337,
-    'G_RP': 0.63439,
+    'BP': 1.08337,
+    'RP': 0.63439,
     'g': 3.518,
     'r': 2.617,
     'i': 1.971,
@@ -44,18 +44,19 @@ EXTINCTION_VECTOR = {
     'K': 0.3026
 }
 
-GAIA_PASSBANDS = ['G', 'G_BP', 'G_RP']
+GAIA_PASSBANDS = ['G', 'BP', 'RP']
 PANSTARRS1_PASSBANDS = ['g', 'r', 'i', 'z', 'y']
-TWOMASS_PASBANDS = ['J', 'H', 'K']
+TWOMASS_PASSBANDS = ['J', 'H', 'K']
+ALL_PASSBANDS = GAIA_PASSBANDS+PANSTARRS1_PASSBANDS+TWOMASS_PASSBANDS
 
 
 def extinction(b_v: np.float32, passband: str) -> np.float32:
     if passband in GAIA_PASSBANDS:
         return 3.1*EXTINCTION_VECTOR[passband]*b_v*0.981
-    elif passband in PANSTARRS1_PASSBANDS or passband in TWOMASS_PASBANDS:
+    elif passband in PANSTARRS1_PASSBANDS or passband in TWOMASS_PASSBANDS:
         return 3.1*EXTINCTION_VECTOR[passband]*b_v
     else:
-        raise ValueError(f'Passband must be one of Gaia passbands: {GAIA_PASSBANDS}!')
+        raise ValueError(f'Passband must be one of passbands: {ALL_PASSBANDS}!')
 
         
 def extinction_coefficient(ra: np.float32, dec: np.float32, distance: np.float32) -> np.float32:
@@ -75,10 +76,10 @@ def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
     sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
                                                sources.dec.values,
                                                1/sources.parallax.values)
-    sources['A_V'] = 3.1*sources['E(B_V)']*0.981
-    sources['A_G'] = extinction(sources['E(B_V)'].values, 'G')
-    sources['A_BP'] = extinction(sources['E(B_V)'].values, 'G_BP')
-    sources['A_RP'] = extinction(sources['E(B_V)'].values, 'G_RP')
+    
+    for passband in ALL_PASSBANDS:
+    
+        sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
     
     sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
     sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
@@ -103,11 +104,11 @@ def add_colors_and_abs_mag_photogeo(sources: pd.DataFrame) -> pd.DataFrame:
     
     sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
                                                sources.dec.values,
-                                               sources.distance.values)
-    sources['A_V'] = 3.1*sources['E(B_V)']*0.981
-    sources['A_G'] = extinction(sources['E(B_V)'].values, 'G')
-    sources['A_BP'] = extinction(sources['E(B_V)'].values, 'G_BP')
-    sources['A_RP'] = extinction(sources['E(B_V)'].values, 'G_RP')
+                                               sources.distance.values/1000)
+    
+    for passband in ALL_PASSBANDS:
+    
+        sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
     
     sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
     sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
