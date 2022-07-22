@@ -65,9 +65,9 @@ def extinction_coefficient(ra: np.float32, dec: np.float32, distance: np.float32
 
 
 def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
-    sources['BP_err'] = 2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])
-    sources['RP_err'] = 2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])
-    sources['G_err'] = 2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])
+    sources['BP_err'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
+    sources['RP_err'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
+    sources['G_err'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
 
     sources = sources.rename(columns={'phot_g_mean_mag': 'G',
                                       'phot_bp_mean_mag': 'BP',
@@ -82,21 +82,22 @@ def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
         sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
     
     sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
-    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
+    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'].values, 2))
     
     #G = g - 10. + 5.*np.log10(par) - A_G  
-    sources['mag_abs'] = sources['G'] - 10. + 5.*np.log10(sources['parallax']) - sources['A_G']
+    sources['mag_abs'] = sources['G'] - 10. + 5.*np.log10(sources['parallax'].values) - sources['A_G'].values
     
     # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
-    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'], 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error']), 2))
+    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'].values, 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error'].values), 2))
     
     return sources
 
 
 def add_colors_and_abs_mag_photogeo(sources: pd.DataFrame) -> pd.DataFrame:
-    sources['BP_err'] = 2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])
-    sources['RP_err'] = 2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])
-    sources['G_err'] = 2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])
+    sources['BP_err'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
+    sources['RP_err'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
+    sources['G_err'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
+    print(sources.dtypes)
 
     sources = sources.rename(columns={'phot_g_mean_mag': 'G',
                                       'phot_bp_mean_mag': 'BP',
