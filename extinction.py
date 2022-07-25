@@ -64,10 +64,26 @@ def extinction_coefficient(ra: np.float32, dec: np.float32, distance: np.float32
                                     distance=distance*u.kpc, frame=ICRS), mode='best')
 
 
+def add_color(sources: pd.DataFrame, color1_name: str, color2_name: str) -> pd.DataFrame:
+    sources[f'{color1_name}-{color2_name}'] = sources[color1_name]-sources[color2_name]\
+                                              -sources[f'A_{color1_name}']+sources[f'A_{color2_name}']
+    sources[f'{color1_name}-{color2_name}_error'] = np.sqrt(np.power(sources[f'{color1_name}_error'].values, 2)+np.power(sources[f'{color2_name}_error'].values, 2))
+    return sources
+
+
+def mag_abs(sources: pd.DataFrame, color_name: str) -> pd.DataFrame:
+        #G = g - 10. + 5.*np.log10(par) - A_G  
+    sources[f'{color_name}_abs'] = sources[color_name] - 10. + 5.*np.log10(sources['parallax'].values) - sources[f'A_{color_name}'].values
+    
+    # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
+    sources[f'{color_name}_abs_error'] = np.sqrt(np.power(sources[f'{color_name}_error'].values, 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error'].values), 2))
+    return sources
+
+
 def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
-    sources['BP_err'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
-    sources['RP_err'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
-    sources['G_err'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
+    sources['BP_error'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
+    sources['RP_error'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
+    sources['G_error'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
 
     sources = sources.rename(columns={'phot_g_mean_mag': 'G',
                                       'phot_bp_mean_mag': 'BP',
@@ -81,44 +97,10 @@ def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
     
         sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
     
-    sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
-    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'].values, 2))
-    
-    #G = g - 10. + 5.*np.log10(par) - A_G  
-    sources['mag_abs'] = sources['G'] - 10. + 5.*np.log10(sources['parallax'].values) - sources['A_G'].values
-    
-    # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
-    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'].values, 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error'].values), 2))
-    
-    return sources
 
+    sources = add_color(sources, 'BP', 'RP')
+    sources = mag_abs(sources, 'G')
 
-def add_colors_and_abs_mag_photogeo(sources: pd.DataFrame) -> pd.DataFrame:
-    sources['BP_err'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
-    sources['RP_err'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
-    sources['G_err'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
-    print(sources.dtypes)
-
-    sources = sources.rename(columns={'phot_g_mean_mag': 'G',
-                                      'phot_bp_mean_mag': 'BP',
-                                      'phot_rp_mean_mag': 'RP'})
-    
-    sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
-                                               sources.dec.values,
-                                               sources.distance.values/1000)
-    
-    for passband in ALL_PASSBANDS:
-    
-        sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
-    
-    sources['color'] = sources['BP']-sources['RP']-sources['A_BP']+sources['A_RP']
-    sources['color_error'] = np.sqrt(np.power(sources['BP_err'].values, 2)+np.power(sources['RP_err'], 2))
-    
-    #G = g - 10. + 5.*np.log10(par) - A_G  
-    sources['mag_abs'] = sources['G'] + 5 - 5.*np.log10(sources['distance']) - sources['A_G']
-    
-    # eG = np.sqrt(eg*eg + (5./np.log(10)*pare/par)**2.)
-    sources['mag_abs_error'] = np.sqrt(np.power(sources['G_err'], 2) + np.power((5./np.log(10))*(1/sources['parallax_over_error']), 2))
     
     return sources
 

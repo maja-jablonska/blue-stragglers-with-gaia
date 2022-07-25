@@ -1,5 +1,6 @@
 from numpy import column_stack
 from astroquery.gaia import Gaia
+import numpy as np
 import pandas as pd
 
 from astropy.coordinates import ICRS, SkyCoord
@@ -76,160 +77,162 @@ def gaia_cone_search_5d(ra: float,
     return job.get_results().to_pandas()
 
 
-def panstarrs1_cone_search_best_neighbour(ra: float,
-                                          dec: float,
-                                          parallax: float,
-                                          pmra: float,
-                                          pmdec: float,
-                                          radvel: float,
-                                          radius: float,
-                                          min_parallax: float,
-                                          max_parallax: float) -> pd.DataFrame:
-    """Perform a cone search around cluster center with proper motion propagation.
-
-    Args:
-        ra (float): right ascension of the cluster center [degrees]
-        dec (float): declination of the cluster center [degrees]
-        parallax (float): parallax of the cluster center [mas]
-        pmra (float): proper motion of the cluster center [mas/yr]
-        pmdec (float): proper motion of the cluster center [mas/yr]
-        radvel (float): radial velocity of the cluster center [km/s]
-        radius (float): radius to search around the cluster center [degrees]
-        min_parallax (float): minimum parallax for sources [mas]
-        max_parallax (float): maximum parallax for the sources [mas]
-
-    Returns:
-        pd.DataFrame: Gaia DR3 cone search results with best neighbours from panstarrs1_best_neighbour
-    """
+def __gaia_dr3_cross_match(source_ids: np.array, survey_name: str, max_ang_sep: float, verbose: bool) -> pd.DataFrame:
     
-    query: str = f'''
+    query: str = f"""
       SELECT
-      panstarrs1_best_neighbour.source_id,
-      panstarrs1_best_neighbour.original_ext_source_id,
-      panstarrs1_best_neighbour.angular_distance
-      FROM gaiadr3.gaia_source JOIN gaiadr3.panstarrs1_best_neighbour ON gaia_source.source_id=panstarrs1_best_neighbour.source_id
-      WHERE 1 = CONTAINS( 
-            POINT('ICRS', ra, dec), 
-            CIRCLE('ICRS',
-                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-            {radius})) 
-      AND parallax > {min_parallax} AND parallax < {max_parallax}
-    '''
-        
-    print('Executing query:')
-    print(query)
-    
-    job = Gaia.launch_job_async(query, output_format='csv')
-    
-    return job.get_results().to_pandas().rename(columns={
-        'original_ext_source_id': 'panstarrs1_id',
-        'angular_distance': 'panstarrs1_angular_distance'
-    })
-
-
-def allwise_cone_search_best_neighbour(ra: float,
-                                       dec: float,
-                                       parallax: float,
-                                       pmra: float,
-                                       pmdec: float,
-                                       radvel: float,
-                                       radius: float,
-                                       min_parallax: float,
-                                       max_parallax: float) -> pd.DataFrame:
-    """Perform a cone search around cluster center with proper motion propagation.
-
-    Args:
-        ra (float): right ascension of the cluster center [degrees]
-        dec (float): declination of the cluster center [degrees]
-        parallax (float): parallax of the cluster center [mas]
-        pmra (float): proper motion of the cluster center [mas/yr]
-        pmdec (float): proper motion of the cluster center [mas/yr]
-        radvel (float): radial velocity of the cluster center [km/s]
-        radius (float): radius to search around the cluster center [degrees]
-        min_parallax (float): minimum parallax for sources [mas]
-        max_parallax (float): maximum parallax for the sources [mas]
-
-    Returns:
-        pd.DataFrame: Gaia DR3 cone search results with best neighbours from allwise_best_neighbour
+      {survey_name}_best_neighbour.source_id, 
+      {survey_name}_best_neighbour.original_ext_source_id, 
+      {survey_name}_best_neighbour.angular_distance, 
+      {survey_name}_best_neighbour.xm_flag 
+      FROM gaiadr3.{survey_name}_best_neighbour 
+      WHERE source_id IN ({', '.join([str(o) for o in source_ids])})
     """
     
-    query: str = f'''
-      SELECT 
-      allwise_best_neighbour.source_id, 
-      allwise_best_neighbour.original_ext_source_id, 
-      allwise_best_neighbour.angular_distance 
-      FROM gaiadr3.gaia_source JOIN gaiadr3.allwise_best_neighbour ON gaia_source.source_id=allwise_best_neighbour.source_id
-      WHERE 1 = CONTAINS( 
-            POINT('ICRS', ra, dec), 
-            CIRCLE('ICRS',
-                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-            {radius})) 
-      AND parallax > {min_parallax} AND parallax < {max_parallax}
-    '''
-        
-    print('Executing query:')
-    print(query)
+    if verbose:
+        print('Executing query:')
+        print(query)
     
     job = Gaia.launch_job_async(query, output_format='csv')
+    result: pd.DataFrame = job.get_results().to_pandas()
+        
+    result = result[(result.xm_flag<16) & (result.angular_distance<=max_ang_sep)]
+    print(f'{survey_name} cross-match: {len(result)} sources')
     
-    return job.get_results().to_pandas().rename(columns={
-        'original_ext_source_id': 'allwise_id',
-        'angular_distance': 'allwise_angular_distance'
+    return result.drop(columns=[
+        'xm_flag', 'angular_distance'
+    ]).rename(columns={
+        'original_ext_source_id': f'{survey_name}_id'
     })
 
 
-def twomass_cone_search_best_neighbour(ra: float,
-                                       dec: float,
-                                       parallax: float,
-                                       pmra: float,
-                                       pmdec: float,
-                                       radvel: float,
-                                       radius: float,
-                                       min_parallax: float,
-                                       max_parallax: float) -> pd.DataFrame:
-    """Perform a cone search around cluster center with proper motion propagation.
+def panstarrs1_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
 
     Args:
-        ra (float): right ascension of the cluster center [degrees]
-        dec (float): declination of the cluster center [degrees]
-        parallax (float): parallax of the cluster center [mas]
-        pmra (float): proper motion of the cluster center [mas/yr]
-        pmdec (float): proper motion of the cluster center [mas/yr]
-        radvel (float): radial velocity of the cluster center [km/s]
-        radius (float): radius to search around the cluster center [degrees]
-        min_parallax (float): minimum parallax for sources [mas]
-        max_parallax (float): maximum parallax for the sources [mas]
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
 
     Returns:
-        pd.DataFrame: Gaia DR3 cone search results with best neighbours from tmass_psc_xsc_best_neighbour
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+
+    return __gaia_dr3_cross_match(source_ids, 'panstarrs1', 1., verbose)
+        
+
+
+
+def allwise_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+
+    return __gaia_dr3_cross_match(source_ids, 'allwise', 3., verbose)
+
+
+def apassdr9_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+
+    return __gaia_dr3_cross_match(source_ids, 'apassdr9', 3., verbose)
+
+
+def twomass_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
     """
     
-    query: str = f'''
-      SELECT 
-      tmass_psc_xsc_best_neighbour.source_id, 
-      tmass_psc_xsc_best_neighbour.original_ext_source_id, 
-      tmass_psc_xsc_best_neighbour.angular_distance 
-      FROM gaiadr3.gaia_source JOIN gaiadr3.tmass_psc_xsc_best_neighbour ON gaia_source.source_id=tmass_psc_xsc_best_neighbour.source_id
-      WHERE 1 = CONTAINS( 
-            POINT('ICRS', ra, dec), 
-            CIRCLE('ICRS',
-                COORD1(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-                COORD2(EPOCH_PROP_POS({ra}, {dec}, {parallax}, {pmra}, {pmdec}, {radvel}, 2000, 2016.0)),
-            {radius})) 
-      AND parallax > {min_parallax} AND parallax < {max_parallax}
-    '''
-        
-    print('Executing query:')
-    print(query)
-    
-    job = Gaia.launch_job_async(query, output_format='csv')
-    
-    return job.get_results().to_pandas().rename(columns={
-        'original_ext_source_id': 'twomass_id',
-        'angular_distance': 'twomass_angular_distance'
+    return __gaia_dr3_cross_match(source_ids, 'tmass_psc_xsc', 3., verbose).rename(columns={
+        'tmass_psc_xsc_id': 'twomass_id'
     })
+
+def ravedr5_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+    
+    return __gaia_dr3_cross_match(source_ids, 'ravedr5', 1., verbose)
+
+
+def ravedr6_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+    
+    return __gaia_dr3_cross_match(source_ids, 'ravedr6', 1., verbose)
+
+
+def sdssdr13_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+    
+    return __gaia_dr3_cross_match(source_ids, 'sdssdr13', 1., verbose)
+
+
+def skymapperdr2_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+    
+    return __gaia_dr3_cross_match(source_ids, 'skymapperdr2', 1., verbose)
+
+
+def urat1_cross_match(source_ids: np.array, verbose: bool = False) -> pd.DataFrame:
+    """Return cross-matched sources for DR3 sources
+
+    Args:
+        source_ids (np.array): Gaia DR3 source ids
+        verbose (bool): Print the executed query
+
+    Returns:
+        pd.DataFrame: Gaia DR3 results with best neighbours from panstarrs1_best_neighbour
+    """
+    
+    return __gaia_dr3_cross_match(source_ids, 'urat1', 1., verbose)
 
 
 def cluster_sources_with_cross_match(ra: float,
