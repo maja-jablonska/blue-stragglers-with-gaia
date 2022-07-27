@@ -77,6 +77,30 @@ def gaia_cone_search_5d(ra: float,
     return job.get_results().to_pandas()
 
 
+def gaia_download_data(source_ids: np.ndarray) -> pd.DataFrame:
+    """
+        Download all columns from Gaia DR3 for given source ids.
+        :param source_ids (np.ndarray): source_ids to download Gaia DR3 data for
+        :return table of all Gaia DR3 columns
+    """
+    
+    print(f"Executing Gaia query for {len(source_ids)} sources...")
+    
+    query: str = f'''
+        SELECT *
+        FROM gaiadr3.gaia_source 
+        WHERE source_id IN ({', '.join([str(o) for o in source_ids])})
+    '''
+        
+    print('Executing query...')
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+
+    print(f"Query finished!")
+    
+    return job.get_results().to_pandas()
+
+
 def __gaia_dr3_cross_match(source_ids: np.array, survey_name: str, max_ang_sep: float, verbose: bool) -> pd.DataFrame:
     
     query: str = f"""
