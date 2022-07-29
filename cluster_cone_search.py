@@ -1,7 +1,6 @@
 from simbad_download import resolve_name
-from gaia_download import cluster_sources_with_cross_match, get_photogeometric_distances
+from gaia_download import gaia_cone_search_5d
 from simbad_download import fetch_object_children, fetch_catalog_id
-from cross_match import query_panstarrs1, query_allwise, query_twomass
 from extinction import add_colors_and_abs_mag
 import pandas as pd
 import click
@@ -76,11 +75,11 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         Querying {radius} degrees around cluster center, with parallax in range [{min_parallax}, {max_parallax}]
         ''')
 
-        sources: pd.DataFrame = cluster_sources_with_cross_match(cluster_ra, cluster_dec, cluster_parallax,
-                                                                 cluster_pmra, cluster_pmdec, cluster_radvel,
-                                                                 radius=radius,
-                                                                 min_parallax=min_parallax,
-                                                                 max_parallax=max_parallax)
+        sources: pd.DataFrame = gaia_cone_search_5d(cluster_ra, cluster_dec, cluster_parallax,
+                                                    cluster_pmra, cluster_pmdec, cluster_radvel,
+                                                    radius=radius,
+                                                    min_parallax=min_parallax,
+                                                    max_parallax=max_parallax)
 
         click.secho(f'Found {len(sources.index)} sources')
         click.secho(f'{len(sources.index)} sources after filtering')
@@ -93,43 +92,6 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
                               frame=ICRS)
 
         sources.ra = sky_coords.ra.wrap_at(180 * u.deg).value
-        
-        click.secho(f'Querying PANSTARRS1.')
-        panstarrs_ids = sources.dropna(subset=['panstarrs1_id']).panstarrs1_id.values
-        
-        panstarrs1_mags = query_panstarrs1()
-        panstarrs_chunks = min(max(int(len(panstarrs_ids)/1000), 1), 20)
-        
-        for panstarrs_chunk in tqdm(np.array_split(panstarrs_ids, panstarrs_chunks)):
-            panstarrs1_mags = pd.concat([panstarrs1_mags, query_panstarrs1(panstarrs_chunk)])
-        click.secho(f'{len(panstarrs1_mags.index)} sources with PANSTARRS1 mags.')
-        
-        click.secho(f'Querying 2MASS.')
-        
-        twomass_ids = sources.dropna(subset=['twomass_id']).twomass_id.values
-        
-        twomass_mags = query_twomass()
-        twomass_chunks = min(max(int(len(twomass_ids)/1000), 1), 20)
-        
-        for twomass_chunk in tqdm(np.array_split(twomass_ids, twomass_chunks)):
-            twomass_mags = pd.concat([twomass_mags, query_twomass(twomass_chunk)])
-        click.secho(f'{len(twomass_mags.index)} sources with 2MASS mags.')
-        
-        click.secho(f'Querying CatWISE.')
-        
-        allwise_ids = sources.dropna(subset=['allwise_id']).allwise_id.values
-        
-        allwise_mags = query_allwise()
-        allwise_chunks = max(min(int(len(allwise_ids)/1000), 1), 20)
-        
-        for allwise_chunk in tqdm(np.array_split(allwise_ids, allwise_chunks)):
-            allwise_mags = pd.concat([allwise_mags, query_allwise(allwise_chunk)])
-            
-        click.secho(f'{len(allwise_mags.index)} sources with CatWISE mags.')
-
-        sources = pd.merge(sources, panstarrs1_mags, left_on='panstarrs1_id', right_on='objID', how='left')
-        sources = pd.merge(sources, twomass_mags, left_on='twomass_id', right_on='name', how='left')
-        sources = pd.merge(sources, allwise_mags, left_on='allwise_id', right_on='source_name', how='left')
 
         sources.to_csv(SOURCES_FILEPATH, index=None)
         click.secho(f'Saved sources to {SOURCES_FILEPATH}!', fg='green', bold=True)
