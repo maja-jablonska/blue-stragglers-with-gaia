@@ -16,18 +16,32 @@ import os.path
 from tqdm import tqdm
 
 
-def normalize(sources: pd.DataFrame,
-              columns: List[str],
-              with_errors: bool = False) -> pd.DataFrame:
+def normalize(cluster_values: np.array) -> pd.DataFrame:
     scaler = StandardScaler()
+    return scaler.fit_transform(cluster_values)
+
+
+def cp_proper_motions(ra: np.float32, 
+                      dec: np.float32,
+                      par: np.float32,
+                      pmra: np.float32,
+                      pmdec: np.float32,
+                      cp_pmra: np.float32,
+                      cp_pmdec: np.float32,
+                      cp_par: np.float32) -> np.matrix:
     
-    s = scaler.fit_transform(sources[columns])
+    tan_theta = cp_pmra/cp_pmdec
     
-    if with_errors:
-        err_columns = [f'{c}_error' for c in columns]
-        rescaled_errors = sources[err_columns].values*scaler.scale_
-        s = np.concatenate([s, rescaled_errors], axis=1)
-    return s
+    sin_theta = tan_theta/np.sqrt(1+np.power(tan_theta, 2))
+    cos_theta = 1/np.sqrt(1+np.power(tan_theta, 2))
+    mu_values = np.squeeze(np.asarray(np.matmul(
+                np.matrix([[sin_theta, cos_theta],
+                           [-cos_theta, sin_theta]]),
+                np.matrix([pmra, pmdec]).T)))
+    return mu_values/par-np.array([cp_pmra/cp_par, 0.])
+
+
+matrices = np.vectorize(cp_proper_motions, excluded=['cp_pmra', 'cp_pmdec', 'cp_par'], otypes=[np.ndarray])
 
 
 @click.command()
@@ -106,9 +120,40 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
             return
     
     if (not os.path.isfile(NORMALIZED_FILEPATH)) or overwrite_all or overwrite_sources:
+        
+        galactic_coordinates = SkyCoord(ra=sources.ra.values*u.deg, dec=sources.dec.values*u.deg, 
+                                        distance=(1/sources.parallax.values)*u.kpc,
+                                        radial_velocity=cluster_radvel*u.km/u.s,
+                                        pm_ra_cosdec=sources.pmra.values*u.mas/u.yr,
+                                        pm_dec=sources.pmdec.values*u.mas/u.yr,
+                                        frame=ICRS)
+        
+        galactic_cartesian = galactic_coordinates.galactic.cartesian
+        
+        proper_motions = np.stack(
+            matrices(
+                sources.ra.values,
+                sources.dec.values,
+                sources.parallax.values,
+                sources.pmra.values,
+                sources.pmdec.values,
+                cluster_pmra,
+                cluster_pmdec,
+                cluster_parallax
+            )
+        )
+        
+        cluster_values = np.concatenate([
+            galactic_cartesian.x.value.reshape((-1, 1)),
+            galactic_cartesian.y.value.reshape((-1, 1)),
+            galactic_cartesian.z.value.reshape((-1, 1)),
+            proper_motions[:, 0].reshape((-1, 1)),
+            proper_motions[:, 1].reshape((-1, 1))
+        ], axis=1)
     
-        normalized_sources = normalize(sources, COLUMNS, with_errors=True)
+        normalized_sources = normalize(cluster_values)
         np.savetxt(NORMALIZED_FILEPATH, normalized_sources)
+        
         click.secho(f'Saved sources to {NORMALIZED_FILEPATH}!', fg='green', bold=True)
     
     else:
