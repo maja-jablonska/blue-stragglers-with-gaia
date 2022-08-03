@@ -11,8 +11,8 @@ from plot_utils import plot_on_aitoff
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from cluster_utils import is_in_cluster_function
 import os.path
+import os
 from tqdm import tqdm
 
 
@@ -58,7 +58,11 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         click.secho(f'Please provide a .csv file!', fg='red', bold=True)
         return
     
-    SOURCES_FILEPATH: str = filepath if filepath else f'{cluster_name}.csv'
+    PATH_ROOT: str = f'data/{cluster_name}'
+    if not filepath and not os.path.exists(PATH_ROOT):
+        os.makedirs(PATH_ROOT)
+        
+    SOURCES_FILEPATH: str = filepath if filepath else f'{PATH_ROOT}/{cluster_name}.csv'
     NORMALIZED_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized.dat')
     LITERATURE_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_literature.csv')
         
