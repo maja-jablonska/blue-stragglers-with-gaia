@@ -28,7 +28,7 @@ def run_dbscan(normalized_sources: np.ndarray,
                calculate_silhouette_score: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     dbscan_labels = dbscan(normalized_sources, eps, min_samples)
     labelled_sources = label_sources(sources, dbscan_labels)
-    clustered, _, cluster_label = get_clustered_and_noise(labelled_sources, dbscan_labels, literature)
+    clustered, noise, cluster_label = get_clustered_and_noise(labelled_sources, dbscan_labels, literature)
     found, not_found = check_for_cluster_children(clustered, literature)
         
     if calculate_silhouette_score:
@@ -37,7 +37,7 @@ def run_dbscan(normalized_sources: np.ndarray,
     
     print(f'{len(found)}/{len(literature)} sources from literature clustered')
     print(f'{len(clustered)} clustered sources.')
-    return clustered, found, not_found
+    return clustered, noise, found, not_found
 
 
 @click.command()
@@ -63,15 +63,15 @@ def dbscan_cluster(cluster_name: str, cp: bool, n_trials: int, reset: bool):
     from_lit_edr3 = get_lit_from_edr3(from_lit, sources)
     
     def objective(trial):
-        eps = trial.suggest_float('eps', 0.01, 0.2)
-        min_samples = trial.suggest_int('min_samples', 2, 20)
+        eps = trial.suggest_float('eps', 0.01, 0.5)
+        min_samples = trial.suggest_int('min_samples', 2, 50)
         
         dbscan_labels = dbscan(normalized_sources, eps, min_samples)
         if len(np.unique(dbscan_labels)) == 1:
             return -len(sources)
             
         labelled_sources = label_sources(sources, dbscan_labels)
-        clustered, noise, cluster_label = get_clustered_and_noise(labelled_sources, dbscan_labels, from_lit_edr3)
+        clustered, _, cluster_label = get_clustered_and_noise(labelled_sources, dbscan_labels, from_lit_edr3)
         
         print(f'{len(clustered)} clustered.')
         if len(clustered)>2*len(from_lit_edr3):
@@ -81,7 +81,7 @@ def dbscan_cluster(cluster_name: str, cp: bool, n_trials: int, reset: bool):
         
         silh_score = heuristic_silhouette_score(normalized_sources, dbscan_labels, cluster_label, 5000)
         print(silh_score)
-        return len(found)/len(from_lit_edr3)+silh_score
+        return len(found)/len(from_lit_edr3)+silh_score*len(clustered)/len(from_lit_edr3)
         
     replaced_cluster_name = cluster_name.replace(' ', '_')
     if cp:
@@ -104,7 +104,7 @@ def dbscan_cluster(cluster_name: str, cp: bool, n_trials: int, reset: bool):
     with open(f'{SQLITE_PATH}/{replaced_cluster_name}_best_params.json', 'w') as f:
         json.dump({'best_value': study.best_value, 'best_params': best_params}, f)
         
-    clustered, found, not_found = run_dbscan(normalized_sources, sources, from_lit_edr3,
+    clustered, noise, found, not_found = run_dbscan(normalized_sources, sources, from_lit_edr3,
                                              best_params['eps'], best_params['min_samples'])
     
     clustered.to_csv(f'{ROOT_PATH}/{cluster_name}_clustered.csv')
