@@ -64,6 +64,7 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         
     SOURCES_FILEPATH: str = filepath if filepath else f'{PATH_ROOT}/{cluster_name}.csv'
     NORMALIZED_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized.dat')
+    NORMALIZED_CP_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_cp.dat')
     LITERATURE_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_literature.csv')
         
     COLUMNS = ['ra', 'dec', 'parallax', 'pmra', 'pmdec']
@@ -147,7 +148,11 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
             )
         )
         
-        cluster_values = np.concatenate([
+        cluster_values = sources[['ra', 'dec', 'parallax', 'pmra', 'pmdec']].values
+        normalized_sources = normalize(cluster_values)
+        np.savetxt(NORMALIZED_FILEPATH, normalized_sources)
+        
+        cluster_values_cp = np.concatenate([
             galactic_cartesian.x.value.reshape((-1, 1)),
             galactic_cartesian.y.value.reshape((-1, 1)),
             galactic_cartesian.z.value.reshape((-1, 1)),
@@ -155,10 +160,10 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
             proper_motions[:, 1].reshape((-1, 1))
         ], axis=1)
     
-        normalized_sources = normalize(cluster_values)
-        np.savetxt(NORMALIZED_FILEPATH, normalized_sources)
+        normalized_sources_cp = normalize(cluster_values_cp)
+        np.savetxt(NORMALIZED_CP_FILEPATH, normalized_sources_cp)
         
-        click.secho(f'Saved sources to {NORMALIZED_FILEPATH}!', fg='green', bold=True)
+        click.secho(f'Saved sources to {NORMALIZED_FILEPATH} and {NORMALIZED_CP_FILEPATH}!', fg='green', bold=True)
     
     else:
         click.secho(f'{NORMALIZED_FILEPATH} exists and --overwrite=False.', fg='yellow', bold=True)
@@ -168,13 +173,6 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         click.secho(f'Downloading sources from Simbad...')
         literature_sources = fetch_object_children(cluster_name)
         click.secho(f'Found {len(literature_sources.index)}.')
-    
-        literature_sources['EDR3 id'] = np.vectorize(fetch_catalog_id)(literature_sources.ids, 'EDR3')
-        literature_sources['DR2 id'] = np.vectorize(fetch_catalog_id)(literature_sources.ids, 'DR2')
-        literature_sources['TIC'] = np.vectorize(fetch_catalog_id)(literature_sources.ids, 'TIC')
-    
-        # Drop sources that aren't in EDR3
-        literature_sources = literature_sources.dropna(subset=['EDR3 id'])
 
         click.secho(f'{len(literature_sources.index)} sources both in Simbad and Gaia DR3')
 

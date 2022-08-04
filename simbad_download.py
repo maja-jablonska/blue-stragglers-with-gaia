@@ -38,7 +38,6 @@ def resolve_name(obj_identifier: str) -> Tuple[Optional[float], Optional[float],
         return None, None, None, None, None, None
 
 
-
 def fetch_object_children(obj_identifier: str) -> pd.DataFrame:
     service = simbad_tap()
     resultset = service.search(f'''
@@ -95,5 +94,40 @@ def fetch_object_children(obj_identifier: str) -> pd.DataFrame:
                  'radvel', 'radvel_err', 'rvz_bibcode', 'ids'],
         data=data.T)
     cluster_children = cluster_children.dropna(subset=['ra', 'dec', 'link_bibcode'])
+    
+    cluster_children['EDR3 id'] = np.vectorize(fetch_catalog_id)(cluster_children.ids, 'EDR3')
+    cluster_children['DR2 id'] = np.vectorize(fetch_catalog_id)(cluster_children.ids, 'DR2')
+    cluster_children['TIC'] = np.vectorize(fetch_catalog_id)(cluster_children.ids, 'TIC')
+    
+    cluster_children['EDR3 id'] = pd.to_numeric(cluster_children['EDR3 id'], errors='coerce')
+    cluster_children['DR2 id'] = pd.to_numeric(cluster_children['DR2 id'], errors='coerce')
+    cluster_children['TIC'] = pd.to_numeric(cluster_children['TIC'], errors='coerce')
+    
+    cluster_children = cluster_children.dropna(subset=['EDR3 id'])
+    
+    edr_unique = np.unique(cluster_children['EDR3 id'].values)
+    reported_counts = {x: len(np.nonzero(cluster_children['EDR3 id'].values==x)[0]) for x in edr_unique}
+    cluster_children['reported'] = cluster_children['EDR3 id'].apply(lambda x: reported_counts[x])
+    cluster_children['parallax_year'] = cluster_children['parallax_bibcode'].apply(lambda x: x[:4])
+    cluster_children['pm_year'] = cluster_children['pm_bibcode'].apply(lambda x: x[:4])
+    cluster_children['rvz_year'] = cluster_children['rvz_bibcode'].apply(lambda x: x[:4])
+    cluster_children = cluster_children.sort_values(by=['EDR3 id', 'parallax_year', 'pm_year', 'rvz_year'])
+    cluster_children = cluster_children.drop_duplicates(subset=['EDR3 id'])
+    
     return cluster_children
+
+
+
+
+def title_and_authors(bibcode: str) -> str:
+    URL = f'https://ui.adsabs.harvard.edu/abs/{bibcode}/abstract'
+    website = requests.get(URL)
+    results = BeautifulSoup(website.content, 'html.parser')
+    title = ' '.join(results.find('h2', class_='s-abstract-title').text.split())
+    authors = [author.text.strip() for author in results.find_all('li', class_='author')]
+    return f'{",".join(authors)}:\n {title}'
+
+
+def count_reportings(children, edr3_id):
+    return len(children[children['EDR3 id'].astype(int)==edr3_id])
 

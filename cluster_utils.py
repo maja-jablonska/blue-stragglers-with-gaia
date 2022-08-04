@@ -89,11 +89,13 @@ def heuristic_silhouette_score(sources_normalized: np.ndarray,
 
 def cluster_plot(clustered_sources: pd.DataFrame,
                  noise_sources: pd.DataFrame,
-                 paper_sources: pd.DataFrame):
+                 paper_sources: pd.DataFrame,
+                 plot_noise: bool = True):
     plt.figure(figsize=(20, 10))
     plt.scatter(clustered_sources.ra, clustered_sources.dec, 
                 color='violet', label='Clustered', zorder=2, s=20.)
-    plt.scatter(noise_sources.ra, noise_sources.dec, color='skyblue', label='Unclustered', zorder=1, s=5.)
+    if plot_noise:
+        plt.scatter(noise_sources.ra, noise_sources.dec, color='skyblue', label='Unclustered', zorder=1, s=5.)
     plt.scatter(paper_sources.ra, paper_sources.dec, color='black', zorder=1,
                 marker='D', label='Reported in papers')
     lgnd = plt.legend(fontsize=14);
@@ -104,23 +106,33 @@ def cluster_plot(clustered_sources: pd.DataFrame,
         handle._sizes = [30];
         
         
+def plot_arrow(ra: float, dec: float, pmra: float, pmdec: float):
+    plt.arrow(ra, dec, pmra, pmdec,
+              linewidth=3., color='mediumseagreen',
+              head_width=0.1, head_length=0.1)
+        
+        
 def cluster_plot_galactic(clustered_sources: pd.DataFrame,
                           noise_sources: pd.DataFrame,
-                          paper_sources: pd.DataFrame):
+                          paper_sources: pd.DataFrame,
+                          plot_noise: bool = True):
     plt.figure(figsize=(20, 10))
     clustered_coordinates = SkyCoord(ra=clustered_sources.ra*u.deg,
                                      dec=clustered_sources.dec*u.deg,
                                      frame=ICRS).galactic
-    noise_coordinates = SkyCoord(ra=noise_sources.ra*u.deg,
-                                 dec=noise_sources.dec*u.deg,
-                                 frame=ICRS).galactic
+    
+    if plot_noise:
+        noise_coordinates = SkyCoord(ra=noise_sources.ra*u.deg,
+                                     dec=noise_sources.dec*u.deg,
+                                     frame=ICRS).galactic
     paper_coordinates = SkyCoord(ra=paper_sources.ra*u.deg,
                                  dec=paper_sources.dec*u.deg,
                                  frame=ICRS).galactic
     
     plt.scatter(clustered_coordinates.l, clustered_coordinates.b, 
                 color='violet', label='Clustered', zorder=2, s=20.)
-    plt.scatter(noise_coordinates.l, noise_coordinates.b, color='skyblue', label='Unclustered', zorder=1, s=5.)
+    if plot_noise:
+        plt.scatter(noise_coordinates.l, noise_coordinates.b, color='skyblue', label='Unclustered', zorder=1, s=5.)
     plt.scatter(paper_coordinates.l, paper_coordinates.b, color='black', zorder=1,
                 marker='D', label='Reported in papers')
     lgnd = plt.legend(fontsize=14);
@@ -129,3 +141,18 @@ def cluster_plot_galactic(clustered_sources: pd.DataFrame,
 
     for handle in lgnd.legendHandles:
         handle._sizes = [30];
+        
+        
+def plot_arrow_galactic(ra: float, dec: float, parallax: float, pmra: float, pmdec: float):
+    galactic_coords = SkyCoord(ra=ra*u.deg, dec=dec*u.deg,
+                               distance=(1/parallax)*u.kpc,
+                               pm_ra_cosdec=pmra*u.mas/u.year,
+                               frame=ICRS,
+                               pm_dec=pmdec*u.mas/u.year).galactic
+    plt.arrow(galactic_coords.l.value,
+              galactic_coords.b.value,
+              galactic_coords.pm_l_cosb.value,
+              galactic_coords.pm_b.value,
+              linewidth=3., color='mediumseagreen',
+              head_width=0.1, head_length=0.1)
+    

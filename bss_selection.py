@@ -5,12 +5,18 @@ import matplotlib.pyplot as plt
 import click
 from download_isochrone import load_isochrone
 from scipy.interpolate import interp1d
+import os
 
 
 @click.command()
 @click.argument('cluster_name', type=str)
 def select_bss_candidates(cluster_name: str):
-    clustered_sources: pd.DataFrame = pd.read_csv(f'data/{cluster_name}/{cluster_name}_clustered.csv')
+    
+    click.secho(f'Selecting BSS candidates using the isochrone for {cluster_name}.', fg='yellow', bold=True)
+    
+    PATH_ROOT: str = f'data/{cluster_name}'
+    
+    clustered_sources: pd.DataFrame = pd.read_csv(f'{PATH_ROOT}/{cluster_name}_clustered.csv')
     isochrone: np.ndarray = load_isochrone(f'data/{cluster_name}/{cluster_name}_isochrone.dat')
     eq_mass_isochrone = isochrone+np.array([0., -0.75])
     
@@ -85,8 +91,8 @@ def select_bss_candidates(cluster_name: str):
              linestyle='--')
     
     bss_candidates = clustered_sources[((dists>=np.nanstd(dists)) & (clustered_sources['G_abs']<TO_MAG) &
-                                        (clustered_sources['BP-RP']<TO_COLOR))]
-    yss_candidates = clustered_sources[(clustered_sources['BP-RP']>TO_COLOR) & (clustered_sources['G_abs']<TO_MAG) &
+                                        (clustered_sources['BP-RP']<1.2*TO_COLOR))]
+    yss_candidates = clustered_sources[(clustered_sources['BP-RP']>1.2*TO_COLOR) & (clustered_sources['G_abs']<TO_MAG) &
                                        (((above_equal_binary_limit) & (dists>=np.nanstd(dists))))]
     plt.errorbar(bss_candidates['BP-RP'], bss_candidates['G_abs'],
                  xerr=bss_candidates['BP-RP_error'], yerr=bss_candidates['G_abs_error'],
