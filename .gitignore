@@ -1,5 +1,7 @@
 data/*/*.csv
 data/*/*.dat
+optuna_db/*/*.json
+optuna_db/*/*.db
 
 .ipynb_checkpoints
 __pycache__
