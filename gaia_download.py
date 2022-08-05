@@ -2,6 +2,7 @@ from numpy import column_stack
 from astroquery.gaia import Gaia
 import numpy as np
 import pandas as pd
+from typing import List
 
 from astropy.coordinates import ICRS, SkyCoord
 import astropy.units as u
@@ -359,3 +360,55 @@ def get_photogeometric_distances(ra: float,
     job = Gaia.launch_job_async(query, output_format='csv')
     
     return job.get_results().to_pandas() 
+
+
+def download_dr3_lightcurve(source_ids: np.ndarray) -> List[pd.DataFrame]:
+    retrieval_type = 'ALL'          # Options are: 'EPOCH_PHOTOMETRY', 'MCMC_GSPPHOT', 'MCMC_MSC', 'XP_SAMPLED', 'XP_CONTINUOUS', 'RVS', 'ALL'
+    data_structure = 'INDIVIDUAL'   # Options are: 'INDIVIDUAL', 'COMBINED', 'RAW'
+    data_release   = 'Gaia DR3'     # Options are: 'Gaia DR3' (default), 'Gaia DR2'
+
+    
+    lightcurves: List[pd.DataFrame] = []
+
+    datalink = Gaia.load_data(ids=source_ids,
+                              data_release = data_release,
+                              retrieval_type= 'EPOCH_PHOTOMETRY',
+                              data_structure = data_structure,
+                              verbose = False, output_file = None)
+    dl_keys  = [inp for inp in datalink.keys()]
+    dl_keys.sort()
+
+    print(f'len{dl_keys} lightcurves found.')
+    for dl_key in dl_keys:
+        print(f'\tDownloading {dl_key}')
+        lightcurves.append(datalink[dl_key][0].to_table().to_pandas())
+        
+    return lightcurves
+
+
+def vari_class(source_ids: np.ndarray) -> pd.DataFrame:
+    query = f'''
+        SELECT source_id, in_vari_rrlyrae, in_vari_cepheid, in_vari_planetary_transit,
+        in_vari_short_timescale, in_vari_long_period_variable,
+        in_vari_eclipsing_binary, in_vari_rotation_modulation,
+        in_vari_ms_oscillator, in_vari_agn,
+        in_vari_microlensing, in_vari_compact_companion 
+        FROM gaiadr3.vari_summary 
+        WHERE vari_summary.source_id IN ({', '.join([str(si) for si in source_ids])})
+    '''
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas()
+
+
+def vari_short_timescale(source_ids: np.ndarray) -> pd.DataFrame:
+    query = f'''
+        SELECT * 
+        FROM gaiadr3.vari_short_timescale 
+        WHERE vari_short_timescale.source_id IN ({', '.join([str(si) for si in source_ids])})
+    '''
+    
+    job = Gaia.launch_job_async(query, output_format='csv')
+    
+    return job.get_results().to_pandas()

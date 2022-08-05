@@ -80,31 +80,6 @@ def mag_abs(sources: pd.DataFrame, color_name: str) -> pd.DataFrame:
     return sources
 
 
-def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
-    sources['BP_error'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
-    sources['RP_error'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
-    sources['G_error'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
-
-    sources = sources.rename(columns={'phot_g_mean_mag': 'G',
-                                      'phot_bp_mean_mag': 'BP',
-                                      'phot_rp_mean_mag': 'RP'})
-    
-    sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
-                                               sources.dec.values,
-                                               1/sources.parallax.values)
-    
-    for passband in ALL_PASSBANDS:
-    
-        sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
-    
-
-    sources = add_color(sources, 'BP', 'RP')
-    sources = mag_abs(sources, 'G')
-
-    
-    return sources
-
-
 def correct_flux_excess_factor(bp_rp, phot_bp_rp_excess_factor):
     """
     Calculate the corrected flux excess factor for the input Gaia EDR3 data.
@@ -147,3 +122,32 @@ def correct_flux_excess_factor(bp_rp, phot_bp_rp_excess_factor):
     correction[redrange] = 1.057572 + 0.140537*bp_rp[redrange]
     
     return phot_bp_rp_excess_factor - correction
+
+
+def add_colors_and_abs_mag(sources: pd.DataFrame) -> pd.DataFrame:
+    sources['BP_error'] = (2.5/(np.log(10)*sources['phot_bp_mean_flux_over_error'])).astype(np.float32)
+    sources['RP_error'] = (2.5/(np.log(10)*sources['phot_rp_mean_flux_over_error'])).astype(np.float32)
+    sources['G_error'] = (2.5/(np.log(10)*sources['phot_g_mean_flux_over_error'])).astype(np.float32)
+
+    sources = sources.rename(columns={'phot_g_mean_mag': 'G',
+                                      'phot_bp_mean_mag': 'BP',
+                                      'phot_rp_mean_mag': 'RP'})
+    
+    sources['E(B_V)'] = extinction_coefficient(sources.ra.values,
+                                               sources.dec.values,
+                                               1/sources.parallax.values)
+    
+    for passband in ALL_PASSBANDS:
+    
+        sources[f'A_{passband}'] = extinction(sources['E(B_V)'].values, passband)
+    
+
+    sources = add_color(sources, 'BP', 'RP')
+    sources = mag_abs(sources, 'G')
+    
+    sources['excess'] = correct_flux_excess_factor(sources['BP-RP'], sources['phot_bp_rp_excess_factor'])
+    
+    return sources
+
+
+

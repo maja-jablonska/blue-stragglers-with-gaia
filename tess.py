@@ -35,5 +35,7 @@ def download_lc(tic: int, cutout_size: int = 10) -> List[lk.LightCurve]:
             ax[i, 1].set_visible(False);
             ax[i, 2].set_visible(False);
             continue
+            
+    plt.show()
     
     return light_curves 
