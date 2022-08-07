@@ -6,6 +6,7 @@ import click
 from download_isochrone import load_isochrone
 from scipy.interpolate import interp1d
 import os
+from sklearn.ensemble import IsolationForest
 
 
 @click.command()
@@ -16,12 +17,16 @@ def select_bss_candidates(cluster_name: str):
     
     PATH_ROOT: str = f'data/{cluster_name}'
     
-    clustered_sources: pd.DataFrame = pd.read_csv(f'{PATH_ROOT}/{cluster_name}_clustered.csv')
+    clustered_sources: pd.DataFrame = pd.read_csv(f'{PATH_ROOT}/{cluster_name}_clustered.csv').dropna(subset=['BP-RP', 'G_abs'])
     isochrone: np.ndarray = load_isochrone(f'data/{cluster_name}/{cluster_name}_isochrone.dat')
     eq_mass_isochrone = isochrone+np.array([0., -0.75])
     
+    
     sources = clustered_sources[['BP-RP', 'G_abs']].values
     BOUNDS = np.max(isochrone, axis=0)-np.min(isochrone, axis=0)
+    
+    clf = IsolationForest(contamination=.25).fit_predict(clustered_sources[['BP-RP', 'G_abs']].values)
+    clustered_sources['outlier'] = clf
     
     def closest(source, isochrone):
         closest = isochrone[
@@ -49,7 +54,7 @@ def select_bss_candidates(cluster_name: str):
         v2 = (p2[0]-source[0], p2[1]-source[1])   # Vector 2
         xp = v1[0]*v2[1] - v1[1]*v2[0]  # Cross product
 
-        return xp>=0
+        return xp+.2>=0
     
     dists = np.apply_along_axis(
         lambda x: distance_to_closest(x, isochrone), 1,
@@ -90,10 +95,12 @@ def select_bss_candidates(cluster_name: str):
              color='tomato', zorder=3,
              linestyle='--')
     
-    bss_candidates = clustered_sources[((dists>=np.nanstd(dists)) & (clustered_sources['G_abs']<TO_MAG) &
+    bss_candidates = clustered_sources[(((dists>=.95*np.nanstd(dists)) | (clustered_sources['outlier']==-1)) & 
+                                        (above_equal_binary_limit) &
+                                        (clustered_sources['G_abs']<TO_MAG) &
                                         (clustered_sources['BP-RP']<1.2*TO_COLOR))]
     yss_candidates = clustered_sources[(clustered_sources['BP-RP']>1.2*TO_COLOR) & (clustered_sources['G_abs']<TO_MAG) &
-                                       (((above_equal_binary_limit) & (dists>=np.nanstd(dists))))]
+                                       (((above_equal_binary_limit) & (dists>=.8*np.nanstd(dists))))]
     plt.errorbar(bss_candidates['BP-RP'], bss_candidates['G_abs'],
                  xerr=bss_candidates['BP-RP_error'], yerr=bss_candidates['G_abs_error'],
                  color='royalblue', fmt='*', zorder=2, label='BSS candidates', markersize=10.)

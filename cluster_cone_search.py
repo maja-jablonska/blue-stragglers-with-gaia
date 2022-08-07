@@ -5,7 +5,7 @@ from extinction import add_colors_and_abs_mag
 import pandas as pd
 import click
 from typing import List, Optional
-from astropy.coordinates import ICRS, SkyCoord
+from astropy.coordinates import ICRS, SkyCoord, Distance
 import astropy.units as u
 from plot_utils import plot_on_aitoff
 import matplotlib.pyplot as plt
@@ -14,11 +14,26 @@ from sklearn.preprocessing import StandardScaler
 import os.path
 import os
 from tqdm import tqdm
+from uncertainties import unumpy
 
 
-def normalize(cluster_values: np.array) -> pd.DataFrame:
-    scaler = StandardScaler()
-    return scaler.fit_transform(cluster_values)
+def normalize(cluster_values) -> pd.DataFrame:
+    means: np.ndarray = np.mean(unumpy.nominal_values(cluster_values), axis=0).reshape(1, -1)
+    stds: np.ndarray = np.std(unumpy.nominal_values(cluster_values), axis=0).reshape(1, -1)
+    return (cluster_values-means)/stds
+
+
+def galactic_coords_with_uncert(ra, ra_err,
+                                dec, dec_err,
+                                par, par_err):
+    ras = np.clip(np.random.normal(scale=ra_err, size=(100,))+ra, a_min=0, a_max=360)
+    decs = np.clip(np.random.normal(scale=dec_err, size=(100,))+dec, a_min=-90, a_max=90)
+    pars = np.clip(np.random.normal(scale=par_err, size=(100,))+par, a_min=1e-5, a_max=None)
+    coords = SkyCoord(ra=ras*u.deg, dec=decs*u.deg, distance=1/pars*u.kpc, frame=ICRS).galactic.cartesian
+    xs = coords.x.value
+    ys = coords.y.value
+    zs = coords.z.value
+    return np.array([np.mean(xs), np.mean(ys), np.mean(zs), np.std(xs), np.std(ys), np.std(zs)])
 
 
 def cp_proper_motions(ra: np.float32, 
@@ -64,7 +79,9 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         
     SOURCES_FILEPATH: str = filepath if filepath else f'{PATH_ROOT}/{cluster_name}.csv'
     NORMALIZED_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized.dat')
+    NORMALIZED_UNCERT_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_uncert.dat')
     NORMALIZED_CP_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_cp.dat')
+    NORMALIZED_CP_UNCERT_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_cp_uncert.dat')
     LITERATURE_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_literature.csv')
         
     COLUMNS = ['ra', 'dec', 'parallax', 'pmra', 'pmdec']
@@ -99,6 +116,7 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
                                                     radius=radius,
                                                     min_parallax=min_parallax,
                                                     max_parallax=max_parallax)
+        sources = sources[sources.parallax>0]
 
         click.secho(f'Found {len(sources.index)} sources')
         click.secho(f'{len(sources.index)} sources after filtering')
@@ -126,22 +144,19 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
     
     if (not os.path.isfile(NORMALIZED_FILEPATH)) or overwrite_all or overwrite_sources:
         
-        galactic_coordinates = SkyCoord(ra=sources.ra.values*u.deg, dec=sources.dec.values*u.deg, 
-                                        distance=(1/sources.parallax.values)*u.kpc,
-                                        radial_velocity=cluster_radvel*u.km/u.s,
-                                        pm_ra_cosdec=sources.pmra.values*u.mas/u.yr,
-                                        pm_dec=sources.pmdec.values*u.mas/u.yr,
-                                        frame=ICRS)
-        
-        galactic_cartesian = galactic_coordinates.galactic.cartesian
+        ras = unumpy.uarray(sources.ra.values, sources.ra_error.values)
+        decs = unumpy.uarray(sources.dec.values, sources.dec_error.values)
+        pmras = unumpy.uarray(sources.pmra.values, sources.pmra_error.values)
+        pmdecs = unumpy.uarray(sources.pmdec.values, sources.pmdec_error.values)
+        parallaxes = unumpy.uarray(sources.parallax.values, sources.parallax_error.values)
         
         proper_motions = np.stack(
             matrices(
-                sources.ra.values,
-                sources.dec.values,
-                sources.parallax.values,
-                sources.pmra.values,
-                sources.pmdec.values,
+                ras,
+                decs,
+                parallaxes,
+                pmras,
+                pmdecs,
                 cluster_pmra,
                 cluster_pmdec,
                 cluster_parallax
@@ -149,19 +164,44 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         )
         
         cluster_values = sources[['ra', 'dec', 'parallax', 'pmra', 'pmdec']].values
-        normalized_sources = normalize(cluster_values)
-        np.savetxt(NORMALIZED_FILEPATH, normalized_sources)
+        uncertainties = sources[['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']].values
+        
+        cluster_values_with_uncert = unumpy.uarray(cluster_values, uncertainties)
+        
+        normalized_sources = normalize(cluster_values_with_uncert)
+        
+        np.savetxt(NORMALIZED_FILEPATH, unumpy.nominal_values(normalized_sources))
+        np.savetxt(NORMALIZED_UNCERT_FILEPATH, unumpy.std_devs(normalized_sources))
+        
+        galactic_cartesian = np.array([galactic_coords_with_uncert(*x) for x in zip(
+                                                         sources.ra.values.flatten(),
+                                                         sources.ra_error.values.flatten(),
+                                                         sources.dec.values.flatten(),
+                                                         sources.dec_error.values.flatten(),
+                                                         sources.parallax.values.flatten(),
+                                                         sources.parallax_error.values.flatten())])
         
         cluster_values_cp = np.concatenate([
-            galactic_cartesian.x.value.reshape((-1, 1)),
-            galactic_cartesian.y.value.reshape((-1, 1)),
-            galactic_cartesian.z.value.reshape((-1, 1)),
-            proper_motions[:, 0].reshape((-1, 1)),
-            proper_motions[:, 1].reshape((-1, 1))
+            galactic_cartesian[:, 0].reshape((-1, 1)),
+            galactic_cartesian[:, 1].reshape((-1, 1)),
+            galactic_cartesian[:, 2].reshape((-1, 1)),
+            unumpy.nominal_values(proper_motions)[:, 0].reshape((-1, 1)),
+            unumpy.nominal_values(proper_motions)[:, 1].reshape((-1, 1))
         ], axis=1)
+        
+        cp_uncertainties = np.concatenate([
+            galactic_cartesian[:, 3].reshape((-1, 1)),
+            galactic_cartesian[:, 4].reshape((-1, 1)),
+            galactic_cartesian[:, 5].reshape((-1, 1)),
+            unumpy.std_devs(proper_motions)[:, 0].reshape((-1, 1)),
+            unumpy.std_devs(proper_motions)[:, 1].reshape((-1, 1))
+        ], axis=1)
+        
+        cluster_values_cp_with_uncert = unumpy.uarray(cluster_values_cp, cp_uncertainties)
     
         normalized_sources_cp = normalize(cluster_values_cp)
-        np.savetxt(NORMALIZED_CP_FILEPATH, normalized_sources_cp)
+        np.savetxt(NORMALIZED_CP_FILEPATH, unumpy.nominal_values(normalized_sources_cp))
+        np.savetxt(NORMALIZED_CP_UNCERT_FILEPATH, unumpy.std_devs(normalized_sources_cp))
         
         click.secho(f'Saved sources to {NORMALIZED_FILEPATH} and {NORMALIZED_CP_FILEPATH}!', fg='green', bold=True)
     

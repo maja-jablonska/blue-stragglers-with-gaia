@@ -42,7 +42,7 @@ def get_clustered_and_noise(labelled_sources: pd.DataFrame,
     if len(unique_label_count) == 0:
         return None, None
     
-    largest_values: np.ndarray = np.flip(np.argsort(unique_label_count[1]))[:5]
+    largest_values: np.ndarray = np.flip(np.argsort(unique_label_count[1]))
     largest_non_noise: np.ndarray = unique_label_count[0][largest_values]
     
     clustered_numbers: pd.DataFrame = np.array(

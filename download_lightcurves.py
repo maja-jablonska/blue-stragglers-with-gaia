@@ -4,10 +4,37 @@ import lightkurve as lk
 from typing import List
 import matplotlib.pyplot as plt
 from tess import download_lc
-from gaia_download import download_dr3_lightcurve
 import click
 import pickle
+from astroquery.gaia import Gaia
 from typing import List
+
+
+def download_dr3_lightcurve(source_ids: np.ndarray) -> List[pd.DataFrame]:
+    retrieval_type = 'ALL'          # Options are: 'EPOCH_PHOTOMETRY', 'MCMC_GSPPHOT', 'MCMC_MSC', 'XP_SAMPLED', 'XP_CONTINUOUS', 'RVS', 'ALL'
+    data_structure = 'INDIVIDUAL'   # Options are: 'INDIVIDUAL', 'COMBINED', 'RAW'
+    data_release   = 'Gaia DR3'     # Options are: 'Gaia DR3' (default), 'Gaia DR2'
+
+    
+    lightcurves: List[pd.DataFrame] = []
+        
+    if len(source_ids) == 0:
+        return pd.DataFrame()
+
+    datalink = Gaia.load_data(ids=source_ids,
+                              data_release = data_release,
+                              retrieval_type= 'EPOCH_PHOTOMETRY',
+                              data_structure = data_structure,
+                              verbose = False, output_file = None)
+    dl_keys  = [inp for inp in datalink.keys()]
+    dl_keys.sort()
+
+    print(f'len{dl_keys} lightcurves found.')
+    for dl_key in dl_keys:
+        print(f'\tDownloading {dl_key}')
+        lightcurves.append(datalink[dl_key][0].to_table().to_pandas())
+        
+    return lightcurves
 
 
 @click.command()
