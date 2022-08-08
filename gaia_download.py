@@ -18,12 +18,22 @@ def format_coord(coord: float) -> str:
 
 
 def get_sources_by_random_index(rows: int = 1000, start_index: int = 0) -> pd.DataFrame:
-    job = Gaia.launch_job(f'''
+    job = Gaia.launch_job(f"""
         SELECT source_id, ra, dec, parallax, parallax_error, 
         pmra, pmra_error, pmdec, pmdec_error 
         FROM gaiadr3.gaia_source 
         WHERE random_index > {start_index} AND random_index < {start_index+rows}
-    ''', output_format='csv')
+    """, output_format='csv')
+
+    return job.get_results().to_pandas()
+
+
+def get_masses(source_ids: np.ndarray) -> pd.DataFrame:
+    job = Gaia.launch_job(f"""
+        SELECT source_id, mass_flame, teff_esphs, teff_espucd, teff_msc1, teff_msc2  
+        FROM gaiadr3.astrophysical_parameters 
+        WHERE source_id IN ({', '.join([str(o) for o in source_ids])});
+    """, output_format='csv')
 
     return job.get_results().to_pandas()
 

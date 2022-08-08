@@ -100,7 +100,7 @@ def select_bss_candidates(cluster_name: str):
                                         (clustered_sources['G_abs']<TO_MAG) &
                                         (clustered_sources['BP-RP']<1.2*TO_COLOR))]
     yss_candidates = clustered_sources[(clustered_sources['BP-RP']>1.2*TO_COLOR) & (clustered_sources['G_abs']<TO_MAG) &
-                                       (((above_equal_binary_limit) & (dists>=.8*np.nanstd(dists))))]
+                                       (((above_equal_binary_limit) & (dists>=.75*np.nanstd(dists))))]
     plt.errorbar(bss_candidates['BP-RP'], bss_candidates['G_abs'],
                  xerr=bss_candidates['BP-RP_error'], yerr=bss_candidates['G_abs_error'],
                  color='royalblue', fmt='*', zorder=2, label='BSS candidates', markersize=10.)

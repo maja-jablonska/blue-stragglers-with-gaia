@@ -166,7 +166,8 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         cluster_values = sources[['ra', 'dec', 'parallax', 'pmra', 'pmdec']].values
         uncertainties = sources[['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']].values
         
-        cluster_values_with_uncert = unumpy.uarray(cluster_values, uncertainties)
+        cluster_values_with_uncert = unumpy.uarray(cluster_values.astype(np.float64),
+                                                   uncertainties.astype(np.float64))
         
         normalized_sources = normalize(cluster_values_with_uncert)
         
