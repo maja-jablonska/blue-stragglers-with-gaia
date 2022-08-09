@@ -8,11 +8,18 @@ import matplotlib.pyplot as plt
 from typing import Optional
 
 
-def load_isochrone(filename: str) -> np.ndarray:
-    isochrone_raw: np.ndarray = np.loadtxt(filename, usecols=(28, 29, 30))
+def load_isochrone(filename: str, with_mass: bool = False) -> np.ndarray:
+    cols = (28, 29, 30, 5) if with_mass else (28, 29, 30)
+    isochrone_raw: np.ndarray = np.loadtxt(filename, usecols=cols)
     isochrone_raw = isochrone_raw[isochrone_raw[:, 0]<15]
-    isochrone: np.ndarray = np.concatenate([(isochrone_raw[:-1, 1]-isochrone_raw[:-1, 2]).reshape(-1, 1),
-                                             isochrone_raw[:-1, 0].reshape(-1, 1)], axis=1)
+    
+    if with_mass:
+        isochrone: np.ndarray = np.concatenate([(isochrone_raw[:-1, 1]-isochrone_raw[:-1, 2]).reshape(-1, 1),
+                                                 isochrone_raw[:-1, 0].reshape(-1, 1),
+                                                 isochrone_raw[:-1, 3].reshape(-1, 1)], axis=1)
+    else:
+        isochrone: np.ndarray = np.concatenate([(isochrone_raw[:-1, 1]-isochrone_raw[:-1, 2]).reshape(-1, 1),
+                                                 isochrone_raw[:-1, 0].reshape(-1, 1)], axis=1)
     return isochrone
 
 
