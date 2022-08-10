@@ -66,8 +66,11 @@ matrices = np.vectorize(cp_proper_motions, excluded=['cp_pmra', 'cp_pmdec', 'cp_
 @click.option('-oa', '--overwrite-all', is_flag=True, default=False, help='Overwrite all the data if files exist.')
 @click.option('-os', '--overwrite-sources', is_flag=True, default=False, help='Overwrite Gaia data files exist.')
 @click.option('-ol', '--overwrite-literature', is_flag=True, default=False, help='Overwrite Simbad data if files exist.')
+@click.option('-pmin', type=float, default=None)
+@click.option('-pmax', type=float, default=None)
 def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Optional[str],
-                                 overwrite_all: bool, overwrite_sources: bool, overwrite_literature: bool):
+                                 overwrite_all: bool, overwrite_sources: bool, overwrite_literature: bool,
+                                 pmin: float, pmax: float):
     
     if filepath and not filepath.endswith('.csv'):
         click.secho(f'Please provide a .csv file!', fg='red', bold=True)
@@ -104,8 +107,8 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
             \t pmdec={cluster_pmdec} mas/yr
             \t radvel={cluster_radvel} km/s
         ''')
-        min_parallax: float = max(0., cluster_parallax-0.25)
-        max_parallax: float = cluster_parallax+0.25
+        min_parallax: float = pmin if pmin else max(0., cluster_parallax-0.25)
+        max_parallax: float = pmax if pmax else cluster_parallax+0.25
 
         click.secho(f'''
         Querying {radius} degrees around cluster center, with parallax in range [{min_parallax}, {max_parallax}]
