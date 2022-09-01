@@ -1,16 +1,15 @@
 from simbad_download import resolve_name
 from gaia_download import gaia_cone_search_5d
-from simbad_download import fetch_object_children, fetch_catalog_id
+from simbad_download import fetch_object_children
 from extinction import add_colors_and_abs_mag
 import pandas as pd
 import click
 from typing import List, Optional
-from astropy.coordinates import ICRS, SkyCoord, Distance
+from astropy.coordinates import ICRS, SkyCoord
 import astropy.units as u
 from plot_utils import plot_on_aitoff
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 import os.path
 import os
 from tqdm import tqdm
@@ -68,29 +67,37 @@ matrices = np.vectorize(cp_proper_motions, excluded=['cp_pmra', 'cp_pmdec', 'cp_
 @click.option('-ol', '--overwrite-literature', is_flag=True, default=False, help='Overwrite Simbad data if files exist.')
 @click.option('-pmin', type=float, default=None)
 @click.option('-pmax', type=float, default=None)
+@click.option('-rp', '--root-path', type=str, default='data')
 def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Optional[str],
                                  overwrite_all: bool, overwrite_sources: bool, overwrite_literature: bool,
-                                 pmin: float, pmax: float):
+                                 pmin: float, pmax: float, root_path: str):
     
     if filepath and not filepath.endswith('.csv'):
         click.secho(f'Please provide a .csv file!', fg='red', bold=True)
         return
     
-    PATH_ROOT: str = f'data/{cluster_name}'
+    PATH_ROOT: str = os.path.join(root_path, cluster_name)
     if not filepath and not os.path.exists(PATH_ROOT):
         os.makedirs(PATH_ROOT)
         
+    # Generate the sources filepaths
+    # Raw sources from Gaia DR3 cone search
     SOURCES_FILEPATH: str = filepath if filepath else f'{PATH_ROOT}/{cluster_name}.csv'
+    
+    # Normalized ra, dec, parallax, proper motions
     NORMALIZED_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized.dat')
     NORMALIZED_UNCERT_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_uncert.dat')
+    
+    # Convergent point method data: x, y, z + proper motions in the cartesian/galactic space
     NORMALIZED_CP_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_cp.dat')
     NORMALIZED_CP_UNCERT_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_normalized_cp_uncert.dat')
+    
+    # Literature sources (from Simbad) cross matched with Gaia
     LITERATURE_FILEPATH: str = SOURCES_FILEPATH.replace('.csv', '_literature.csv')
-        
-    COLUMNS = ['ra', 'dec', 'parallax', 'pmra', 'pmdec']
     
     if (not os.path.isfile(SOURCES_FILEPATH)) or overwrite_all or overwrite_sources:
 
+        # Obtain the cluster center data from the literature
         click.secho(f'\nResolving {cluster_name} using Simbad...')
         cluster_ra, cluster_dec, cluster_parallax, cluster_pmra, cluster_pmdec, cluster_radvel = resolve_name(cluster_name)
 
@@ -107,6 +114,8 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
             \t pmdec={cluster_pmdec} mas/yr
             \t radvel={cluster_radvel} km/s
         ''')
+        
+        # Filter by parallax to constrain number of the cluster sources
         min_parallax: float = pmin if pmin else max(0., cluster_parallax-0.25)
         max_parallax: float = pmax if pmax else cluster_parallax+0.25
 
@@ -114,18 +123,24 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         Querying {radius} degrees around cluster center, with parallax in range [{min_parallax}, {max_parallax}]
         ''')
 
+        # Perform the gaia cone search using the literature cluster center data and parallax constraints
         sources: pd.DataFrame = gaia_cone_search_5d(cluster_ra, cluster_dec, cluster_parallax,
                                                     cluster_pmra, cluster_pmdec, cluster_radvel,
                                                     radius=radius,
                                                     min_parallax=min_parallax,
                                                     max_parallax=max_parallax)
+        
+        # Discard the parallax<0 (poor measurements)
+        # TODO: should I do that?
         sources = sources[sources.parallax>0]
 
         click.secho(f'Found {len(sources.index)} sources')
         click.secho(f'{len(sources.index)} sources after filtering')
 
+        # Calculate the colours and flux corrections
         sources = add_colors_and_abs_mag(sources)
 
+        # Wrap the coordinates using astropy
         sky_coords = SkyCoord(ra=sources['ra'].values,
                               dec=sources['dec'].values,
                               unit=(u.deg, u.deg),
@@ -147,12 +162,15 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
     
     if (not os.path.isfile(NORMALIZED_FILEPATH)) or overwrite_all or overwrite_sources:
         
+        # Add uncertainties to the astrometric values
+        
         ras = unumpy.uarray(sources.ra.values, sources.ra_error.values)
         decs = unumpy.uarray(sources.dec.values, sources.dec_error.values)
         pmras = unumpy.uarray(sources.pmra.values, sources.pmra_error.values)
         pmdecs = unumpy.uarray(sources.pmdec.values, sources.pmdec_error.values)
         parallaxes = unumpy.uarray(sources.parallax.values, sources.parallax_error.values)
         
+        # Calculate the proper motions for the convergent point method
         proper_motions = np.stack(
             matrices(
                 ras,
@@ -165,10 +183,11 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
                 cluster_parallax
             )
         )
-        
+
         cluster_values = sources[['ra', 'dec', 'parallax', 'pmra', 'pmdec']].values
         uncertainties = sources[['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']].values
         
+        # Add the uncertainties to propagate the uncertainties through the normalization procedure
         cluster_values_with_uncert = unumpy.uarray(cluster_values.astype(np.float64),
                                                    uncertainties.astype(np.float64))
         
@@ -176,6 +195,8 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         
         np.savetxt(NORMALIZED_FILEPATH, unumpy.nominal_values(normalized_sources))
         np.savetxt(NORMALIZED_UNCERT_FILEPATH, unumpy.std_devs(normalized_sources))
+        
+        # Change the reference frame to galactic and convert to Cartesian reporesentation
         
         galactic_cartesian = np.array([galactic_coords_with_uncert(*x) for x in zip(
                                                          sources.ra.values.flatten(),
@@ -185,6 +206,7 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
                                                          sources.parallax.values.flatten(),
                                                          sources.parallax_error.values.flatten())])
         
+        # Cluster values are x, y, z, proper motions
         cluster_values_cp = np.concatenate([
             galactic_cartesian[:, 0].reshape((-1, 1)),
             galactic_cartesian[:, 1].reshape((-1, 1)),
@@ -203,7 +225,7 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
         
         cluster_values_cp_with_uncert = unumpy.uarray(cluster_values_cp, cp_uncertainties)
     
-        normalized_sources_cp = normalize(cluster_values_cp)
+        normalized_sources_cp = normalize(cluster_values_cp_with_uncert)
         np.savetxt(NORMALIZED_CP_FILEPATH, unumpy.nominal_values(normalized_sources_cp))
         np.savetxt(NORMALIZED_CP_UNCERT_FILEPATH, unumpy.std_devs(normalized_sources_cp))
         
@@ -215,7 +237,10 @@ def download_sources_for_cluster(cluster_name: str, radius: float, filepath: Opt
     if (not os.path.isfile(LITERATURE_FILEPATH)) or overwrite_all or overwrite_literature:
 
         click.secho(f'Downloading sources from Simbad...')
+        
+        # Download the literature sources from Simbad, cross-matched with Gaia DR3 and TESS
         literature_sources = fetch_object_children(cluster_name)
+        
         click.secho(f'Found {len(literature_sources.index)}.')
 
         click.secho(f'{len(literature_sources.index)} sources both in Simbad and Gaia DR3')
